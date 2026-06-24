@@ -1,4 +1,6 @@
-/* eslint-disable @next/next/no-html-link-for-pages */
+"use client";
+
+import Link from "next/link";
 
 export default function NotFound() {
   return (
@@ -17,12 +19,12 @@ export default function NotFound() {
           </p>
         </div>
         <div className="pt-4">
-          <a
+          <Link
             href="/"
             className="inline-flex items-center justify-center px-5 py-2.5 rounded-lg border border-violet-500 bg-violet-950/40 text-violet-300 font-medium text-sm hover:bg-violet-600 hover:text-white transition-all duration-200 shadow-md shadow-violet-950/20"
           >
             Return to Dashboard Core
-          </a>
+          </Link>
         </div>
       </div>
     </div>

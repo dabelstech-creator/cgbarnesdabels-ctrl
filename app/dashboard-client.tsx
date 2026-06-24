@@ -48,6 +48,11 @@ import {
   Copy,
   Check,
   Upload,
+  Globe,
+  Database,
+  Users,
+  LayoutGrid,
+  LogIn,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
@@ -215,6 +220,38 @@ export default function Dashboard() {
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
+  // New Management & Mock OAuth States
+  const [activeTab, setActiveTab] = useState<"telemetry" | "management" | "security" | "ai">("telemetry");
+  const [isMockOAuthProcessing, setIsMockOAuthProcessing] = useState(false);
+  const [mockOAuthStatus, setMockOAuthStatus] = useState<"Unverified" | "Authenticating" | "Verified">("Verified");
+  const [lastAuditAction, setLastAuditAction] = useState<string>("System Boot Success");
+
+  // Gemini State
+  const [geminiInput, setGeminiInput] = useState("");
+  const [geminiOutput, setGeminiOutput] = useState("");
+  const [isGeminiLoading, setIsGeminiLoading] = useState(false);
+
+  const handleGeminiSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!geminiInput.trim()) return;
+    setIsGeminiLoading(true);
+    setGeminiOutput("");
+    try {
+      const response = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: geminiInput }),
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      setGeminiOutput(data.text);
+    } catch (err: any) {
+      setGeminiOutput(`Error: ${err.message}`);
+    } finally {
+      setIsGeminiLoading(false);
+    }
+  };
+
   // Pulse animation states on updates
   const currentHeartRate = biometricData.length > 0 ? biometricData[biometricData.length - 1].heartRate : 72;
   const currentSteps = biometricData.length > 0 ? biometricData[biometricData.length - 1].steps : 0;
@@ -289,6 +326,39 @@ export default function Dashboard() {
     navigator.clipboard.writeText(csvContent);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleMockOAuthToggle = async () => {
+    setIsMockOAuthProcessing(true);
+    setMockOAuthStatus("Authenticating");
+    
+    // Log the initiation
+    await addDoc(collection(db, "logs"), {
+      type: "auth",
+      level: "info",
+      message: "Initiating OIDC Mock Handshake",
+      details: "Requesting cryptographic salt and discovery keys for internal audit verification.",
+      timestamp: serverTimestamp(),
+    });
+
+    setTimeout(async () => {
+      const isCurrentlyVerified = mockOAuthStatus === "Verified";
+      const newState = isCurrentlyVerified ? "Unverified" : "Verified";
+      setMockOAuthStatus(newState);
+      setIsMockOAuthProcessing(false);
+      setLastAuditAction(newState === "Verified" ? "Audit Success: JWT Verified" : "Audit Alert: Session Revoked");
+
+      // Log the result
+      await addDoc(collection(db, "logs"), {
+        type: "auth",
+        level: newState === "Verified" ? "success" : "warning",
+        message: newState === "Verified" ? "Mock OAuth Handshake Verified" : "Mock OAuth Session Terminated",
+        details: newState === "Verified" 
+          ? "RS256 Signature validated against JWKS endpoint. Audit trail updated."
+          : "Administrative logout initiated. Session tokens invalidated in local cache.",
+        timestamp: serverTimestamp(),
+      });
+    }, 2000);
   };
 
   // CSV Import States
@@ -1245,9 +1315,44 @@ export default function Dashboard() {
             </motion.div>
           ) : (
             /* SECURE DASHBOARD INTERNAL VIEW */
-            <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+            <div className="lg:col-span-12 flex flex-col space-y-6 w-full">
               
-              {/* LEFT COLUMN - USER DEFAULTS & AI BOT CONTROL */}
+              {/* NAVIGATION TABS */}
+              <div className="flex items-center space-x-2 bg-slate-900/50 border border-slate-800 p-1.5 rounded-2xl w-fit">
+                <button
+                  onClick={() => setActiveTab("telemetry")}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "telemetry" ? "bg-violet-600 text-white shadow-lg shadow-violet-900/20" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                >
+                  <Activity className="w-4 h-4" />
+                  <span>Telemetry</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("management")}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "management" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/20" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                  <span>Management</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("security")}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "security" ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Security & Audit</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("ai")}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "ai" ? "bg-amber-600 text-white shadow-lg shadow-amber-900/20" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Gemini Insights</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+                {activeTab === "telemetry" && (
+                  <>
+                    {/* LEFT COLUMN - USER DEFAULTS & AI BOT CONTROL */}
               <div className="lg:col-span-4 flex flex-col space-y-6">
                 
                 {/* ACTIVE SECURITY USER PROFILE CARD */}
@@ -1918,9 +2023,373 @@ export default function Dashboard() {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </div>
-              </div>
+                    </div>
+                  </div>
+                </>
+              )}
 
+                {activeTab === "management" && (
+                  <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* cPanel Card */}
+                    <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-6 shadow-md relative overflow-hidden group hover:border-indigo-500/50 transition-all duration-300">
+                      <div className="absolute -right-8 -top-8 w-24 h-24 bg-indigo-600/10 rounded-full blur-2xl group-hover:bg-indigo-600/20 transition-all"></div>
+                      <div className="flex flex-col space-y-4 relative">
+                        <div className="w-12 h-12 bg-indigo-600/20 border border-indigo-500/30 rounded-xl flex items-center justify-center">
+                          <Globe className="w-6 h-6 text-indigo-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-white">cPanel Hosting</h3>
+                          <p className="text-xs text-slate-400 mt-1">Manage domains, files, and server resources.</p>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                          <div className="flex justify-between text-[10px] font-mono">
+                            <span className="text-slate-500">Domains Active:</span>
+                            <span className="text-white">12</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] font-mono">
+                            <span className="text-slate-500">Storage Used:</span>
+                            <span className="text-white">84% (42GB/50GB)</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                            <div className="h-full bg-indigo-500 w-[84%]"></div>
+                          </div>
+                        </div>
+                        <button className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition shadow-lg shadow-indigo-900/20">
+                          Launch cPanel
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* WHMS Card */}
+                    <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-6 shadow-md relative overflow-hidden group hover:border-violet-500/50 transition-all duration-300">
+                      <div className="absolute -right-8 -top-8 w-24 h-24 bg-violet-600/10 rounded-full blur-2xl group-hover:bg-violet-600/20 transition-all"></div>
+                      <div className="flex flex-col space-y-4 relative">
+                        <div className="w-12 h-12 bg-violet-600/20 border border-violet-500/30 rounded-xl flex items-center justify-center">
+                          <Database className="w-6 h-6 text-violet-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-white">WHMS Billing</h3>
+                          <p className="text-xs text-slate-400 mt-1">Automated client management and billing cycles.</p>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                          <div className="flex justify-between text-[10px] font-mono">
+                            <span className="text-slate-500">Active Clients:</span>
+                            <span className="text-white">1,248</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] font-mono">
+                            <span className="text-slate-500">Monthly Revenue:</span>
+                            <span className="text-emerald-400 font-bold">$12,450.00</span>
+                          </div>
+                          <div className="flex -space-x-2">
+                            {[1, 2, 3, 4].map(i => (
+                              <div key={i} className="w-6 h-6 rounded-full border-2 border-slate-900 bg-slate-800"></div>
+                            ))}
+                            <div className="w-6 h-6 rounded-full border-2 border-slate-900 bg-slate-700 flex items-center justify-center text-[8px] text-white font-bold">+24</div>
+                          </div>
+                        </div>
+                        <button className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition shadow-lg shadow-violet-900/20">
+                          Open WHMS
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Mailing List Card */}
+                    <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-6 shadow-md relative overflow-hidden group hover:border-emerald-500/50 transition-all duration-300">
+                      <div className="absolute -right-8 -top-8 w-24 h-24 bg-emerald-600/10 rounded-full blur-2xl group-hover:bg-emerald-600/20 transition-all"></div>
+                      <div className="flex flex-col space-y-4 relative">
+                        <div className="w-12 h-12 bg-emerald-600/20 border border-emerald-500/30 rounded-xl flex items-center justify-center">
+                          <Users className="w-6 h-6 text-emerald-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-white">Mailing Lists</h3>
+                          <p className="text-xs text-slate-400 mt-1">Broadcast newsletters and automation sequences.</p>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                          <div className="flex justify-between text-[10px] font-mono">
+                            <span className="text-slate-500">Total Subscribers:</span>
+                            <span className="text-white">45,820</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] font-mono">
+                            <span className="text-slate-500">Avg Open Rate:</span>
+                            <span className="text-emerald-400 font-bold">32.4%</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] font-mono">
+                            <span className="text-slate-500">Status:</span>
+                            <span className="text-emerald-400 font-bold animate-pulse">SENDING...</span>
+                          </div>
+                        </div>
+                        <button className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition shadow-lg shadow-emerald-900/20">
+                          Manage Lists
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "security" && (
+                  <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Mock OAuth Handshake Demo */}
+                    <div className="lg:col-span-5 flex flex-col space-y-6">
+                      <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-6 shadow-md relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4">
+                          <ShieldCheck className="h-6 w-6 text-emerald-500/20" />
+                        </div>
+                        <h3 className="text-sm font-bold text-white uppercase font-mono mb-4">OAuth Audit Simulation</h3>
+                        
+                        <div className="space-y-6">
+                          <div className="flex flex-col items-center justify-center py-6 space-y-4">
+                            <div className="relative">
+                              <motion.div 
+                                animate={isMockOAuthProcessing ? { rotate: 360 } : {}}
+                                transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                                className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-colors duration-500 ${mockOAuthStatus === "Verified" ? "border-emerald-500/30 bg-emerald-500/10" : "border-slate-800 bg-slate-900/50"}`}
+                              >
+                                {isMockOAuthProcessing ? (
+                                  <RefreshCw className="w-8 h-8 text-violet-400 animate-spin" />
+                                ) : mockOAuthStatus === "Verified" ? (
+                                  <ShieldCheck className="w-8 h-8 text-emerald-400" />
+                                ) : (
+                                  <Lock className="w-8 h-8 text-slate-500" />
+                                )}
+                              </motion.div>
+                              {mockOAuthStatus === "Verified" && !isMockOAuthProcessing && (
+                                <motion.div 
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 border-2 border-[#090d16] rounded-full flex items-center justify-center"
+                                >
+                                  <Check className="w-3.5 h-3.5 text-white" />
+                                </motion.div>
+                              )}
+                            </div>
+
+                            <div className="text-center">
+                              <div className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-1 ${mockOAuthStatus === "Verified" ? "text-emerald-400" : "text-slate-500"}`}>
+                                {mockOAuthStatus === "Verified" ? "Session Verified" : "Session Revoked"}
+                              </div>
+                              <h4 className="text-lg font-bold text-white">Administrative Portal</h4>
+                              <p className="text-xs text-slate-400 mt-1 max-w-[240px] mx-auto">
+                                Secure multi-tenant identity verification using OIDC standards.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3 pt-2">
+                            <div className="flex justify-between items-center p-3 bg-slate-900/50 border border-slate-800 rounded-xl">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-slate-500 uppercase font-mono">Current Audit State</span>
+                                <span className={`text-xs font-bold font-mono ${mockOAuthStatus === "Verified" ? "text-emerald-400" : "text-red-400"}`}>
+                                  {mockOAuthStatus === "Verified" ? "PROTECTED_ACTIVE" : "SECURITY_LOCKED"}
+                                </span>
+                              </div>
+                              <div className={`px-2 py-1 rounded text-[9px] font-bold font-mono ${mockOAuthStatus === "Verified" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" : "bg-red-500/10 text-red-400 border border-red-500/30"}`}>
+                                {mockOAuthStatus}
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={handleMockOAuthToggle}
+                              disabled={isMockOAuthProcessing}
+                              className={`w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all active:scale-[0.98] flex items-center justify-center space-x-2 ${mockOAuthStatus === "Verified" ? "bg-red-500/10 hover:bg-red-500/20 border border-red-900/30 text-red-400" : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20"}`}
+                            >
+                              {isMockOAuthProcessing ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                  <span>Authorizing Audit Trail...</span>
+                                </>
+                              ) : mockOAuthStatus === "Verified" ? (
+                                <>
+                                  <LogOut className="w-4 h-4" />
+                                  <span>Revoke OAuth Access</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ShieldCheck className="w-4 h-4" />
+                                  <span>Simulate OAuth Handshake</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+                            <span className="text-[9px] text-slate-500 font-mono">Last Audit: {lastAuditAction}</span>
+                            <span className="text-[9px] text-slate-500 font-mono">Mode: Audit-Only</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/30 border border-slate-800 p-4 rounded-2xl">
+                        <div className="flex items-center space-x-3 text-slate-400">
+                          <Activity className="w-5 h-5 text-indigo-400" />
+                          <div>
+                            <h4 className="text-xs font-bold text-white">Live Audit Feed</h4>
+                            <p className="text-[10px] text-slate-500">Every auth action is logged to Firestore.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Audit Logs Column */}
+                    <div className="lg:col-span-7 flex flex-col">
+                      <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-5 shadow-md flex-1 flex flex-col relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4">
+                          <Terminal className="h-5 w-5 text-slate-500/20" />
+                        </div>
+
+                        <h3 className="text-xs font-bold text-slate-400 tracking-wide uppercase font-mono mb-4 flex items-center space-x-2">
+                          <span className="h-2.5 w-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                          <span>Security & Operations Audit Trail</span>
+                        </h3>
+
+                        {/* Logs stream console */}
+                        <div className="flex-1 bg-slate-950/80 border border-slate-850 rounded-xl p-4 font-mono text-xs overflow-y-auto max-h-[450px] space-y-2.5">
+                          {logs.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center py-12 text-slate-500 space-y-2">
+                              <Activity className="h-6 w-6 animate-pulse" />
+                              <span>No audit logs persisted.</span>
+                            </div>
+                          ) : (
+                            logs.map((log) => {
+                              const isSuccess = log.level === "success";
+                              const isWarning = log.level === "warning";
+                              const isError = log.level === "error";
+                              const colorClass = isSuccess 
+                                ? "text-emerald-400" 
+                                : isWarning 
+                                  ? "text-amber-400" 
+                                  : isError 
+                                    ? "text-red-400" 
+                                    : "text-cyan-400";
+                              
+                              return (
+                                <div
+                                  key={log.id}
+                                  onClick={() => setSelectedLog(log)}
+                                  className="p-2 rounded hover:bg-slate-900/60 transition cursor-pointer border border-transparent hover:border-slate-800 flex items-start space-x-2.5"
+                                >
+                                  <span className="text-[10px] text-slate-500 flex-shrink-0 pt-0.5">
+                                    {log.timestamp instanceof Date ? log.timestamp.toLocaleTimeString() : ""}
+                                  </span>
+                                  <span className={`font-semibold uppercase text-[10px] px-1.5 py-0.5 rounded bg-slate-900 ${colorClass}`}>
+                                    {log.type}
+                                  </span>
+                                  <span className="text-slate-300 break-words flex-1 leading-normal">
+                                    {log.message}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "ai" && (
+                  <div className="lg:col-span-12 space-y-6">
+                    <div className="bg-[#090d16] border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+                      <div className="absolute -top-24 -right-24 w-96 h-96 bg-amber-500/10 rounded-full blur-[100px]" />
+                      
+                      <div className="relative z-10 space-y-8">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center space-x-2">
+                              <div className="p-2 bg-amber-500/10 rounded-lg">
+                                <Sparkles className="h-5 w-5 text-amber-500" />
+                              </div>
+                              <h2 className="text-2xl font-bold text-white tracking-tight">Gemini AI Workspace Insights</h2>
+                            </div>
+                            <p className="text-slate-400 text-sm max-w-xl">
+                              Leverage high-reasoning models to analyze workspace telemetry, security patterns, and management logistics in real-time.
+                            </p>
+                          </div>
+                          
+                          <div className="flex items-center space-x-3 bg-slate-900/50 border border-slate-800 p-2 rounded-2xl">
+                            <div className="flex items-center space-x-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                              <div className="h-1.5 w-1.5 bg-amber-500 rounded-full animate-pulse" />
+                              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">High Thinking Enabled</span>
+                            </div>
+                            <div className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Model: Gemini 3.5 Flash</div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                          <div className="space-y-4">
+                            <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 space-y-4">
+                              <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-2">
+                                <Code className="h-4 w-4 text-amber-500" />
+                                <span>Analytical Inquiry</span>
+                              </h3>
+                              
+                              <form onSubmit={handleGeminiSubmit} className="space-y-4">
+                                <div className="relative">
+                                  <textarea
+                                    value={geminiInput}
+                                    onChange={(e) => setGeminiInput(e.target.value)}
+                                    placeholder="Ask Gemini to analyze system health or security protocols..."
+                                    className="w-full bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all min-h-[120px] resize-none"
+                                  />
+                                  <div className="absolute bottom-3 right-3 flex items-center space-x-2">
+                                    <button
+                                      type="submit"
+                                      disabled={isGeminiLoading || !geminiInput.trim()}
+                                      className="flex items-center space-x-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-all shadow-lg shadow-amber-900/20"
+                                    >
+                                      {isGeminiLoading ? (
+                                        <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                      ) : (
+                                        <Send className="h-4 w-4" />
+                                      )}
+                                      <span>Process</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </form>
+
+                              <div className="pt-2">
+                                <p className="text-[10px] text-slate-500 leading-relaxed italic">
+                                  Note: &quot;High Thinking&quot; level is prioritized for this session, allowing the model to perform deeper multi-step reasoning before delivering the final workspace audit.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 h-full flex flex-col min-h-[300px]">
+                              <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-2 mb-4">
+                                <Activity className="h-4 w-4 text-amber-500" />
+                                <span>Output Manifest</span>
+                              </h3>
+                              
+                              <div className="flex-1 bg-[#05080f] border border-slate-800/50 rounded-xl p-4 overflow-y-auto font-mono text-xs text-slate-300 relative">
+                                {isGeminiLoading ? (
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center space-y-3">
+                                    <div className="relative">
+                                      <div className="h-12 w-12 border-b-2 border-amber-500 rounded-full animate-spin" />
+                                      <Sparkles className="absolute inset-0 m-auto h-5 w-5 text-amber-500 animate-pulse" />
+                                    </div>
+                                    <span className="text-amber-500 font-bold animate-pulse">ORCHESTRATING REASONING...</span>
+                                  </div>
+                                ) : geminiOutput ? (
+                                  <div className="whitespace-pre-wrap leading-relaxed">
+                                    {geminiOutput}
+                                  </div>
+                                ) : (
+                                  <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2 opacity-50">
+                                    <Terminal className="h-8 w-8" />
+                                    <span>Standby for AI analytical payload...</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </AnimatePresence>
