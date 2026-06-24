@@ -1,1 +1,41 @@
 @import "tailwindcss";
+
+@layer base {
+  html, body {
+    background-color: #030712;
+    color: #f1f5f9;
+    /* Optimize font rendering on macOS/iOS and other platforms */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Smooth scrolling and prevent viewport bounce issues on iOS */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    /* Prevent gray tap highlight on iOS Safari interactive elements */
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Custom scrollbar for terminal/logs */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.4);
+}
+
+/* Cross-browser interactive and input resets */
+input, button, select, textarea {
+  font-family: inherit;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+}

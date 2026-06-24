@@ -1,30 +1,30 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
+import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import "./globals.css";
 
 const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-sans',
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
-  title: 'Workspace Sync Dashboard',
-  description: 'Sync Gmail, Drive, Calendar, and Contacts into Cloud Firestore.',
+  title: "Workspace Integration Dashboard",
+  description: "Enterprise Workspace logs sync and compliance control center.",
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    <html lang="en" className={inter.variable}>
-      <head>
-        {/* Support google API scripts for Google Picker */}
-        <script async defer src="https://apis.google.com/js/api.js"></script>
-        <script async defer src="https://accounts.google.com/gsi/client"></script>
-      </head>
-      <body className="bg-[#030712] text-slate-100 antialiased min-h-screen">
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} dark`}>
+      <body className="font-sans antialiased bg-[#030712] text-slate-100 min-h-screen">
         {children}
       </body>
     </html>

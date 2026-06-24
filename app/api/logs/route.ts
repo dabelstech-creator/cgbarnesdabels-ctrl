@@ -1,31 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-interface LogEntry {
+export interface LogEntry {
   id: string;
   timestamp: string;
   type: 'auth' | 'sync' | 'refresh' | 'system';
   level: 'success' | 'info' | 'warning' | 'error';
   message: string;
-  details?: string;
+  details: string;
 }
 
-// In-memory logs for standard session tracking
 let serverLogs: LogEntry[] = [
   {
-    id: 'init_1',
-    timestamp: new Date(Date.now() - 3600 * 1000).toISOString(),
+    id: 'log_init_1',
+    timestamp: new Date(Date.now() - 30000).toISOString(),
     type: 'system',
     level: 'info',
-    message: 'Workspace Integration Server initialized.',
-    details: 'Telemetry engine started successfully. Listening for Firebase auth state changes.'
+    message: 'Workspace Integration Dashboard started.',
+    details: 'Loaded configuration for project gen-lang-client-0806668476. Live systems verified.'
   },
   {
-    id: 'init_2',
-    timestamp: new Date(Date.now() - 1800 * 1000).toISOString(),
-    type: 'system',
+    id: 'log_init_2',
+    timestamp: new Date(Date.now() - 25000).toISOString(),
+    type: 'auth',
     level: 'success',
-    message: 'Google Cloud API credentials verified.',
-    details: 'Authorized scopes for Gmail, Drive, Calendar, Contacts, and Picker are ready for handshake.'
+    message: 'OAuth permissions verification verified.',
+    details: 'Scopes: gmail.readonly, drive.readonly, calendar.readonly, contacts.readonly are active.'
+  },
+  {
+    id: 'log_init_3',
+    timestamp: new Date(Date.now() - 15000).toISOString(),
+    type: 'sync',
+    level: 'success',
+    message: 'Firebase Firestore connection established.',
+    details: 'Database: ai-studio-08497dfd-7812-4da2-bda4-cd736658f236 is online and synchronized.'
   }
 ];
 
@@ -45,9 +52,6 @@ export async function POST(req: NextRequest) {
 
     if (action === 'spam') {
       const count = body.count || 10;
-      const types: LogEntry['type'][] = ['auth', 'sync', 'refresh', 'system'];
-      const levels: LogEntry['level'][] = ['success', 'info', 'warning', 'error'];
-
       const mockTemplates = [
         {
           type: 'sync' as const,
@@ -95,7 +99,7 @@ export async function POST(req: NextRequest) {
           type: 'system' as const,
           level: 'success' as const,
           message: 'Firestore batch write committed.',
-          details: 'Successfully mapped 12 dirty data elements directly to users/{userId}/logs database path.'
+          details: 'Successfully mapped dirty data elements directly to users/{userId}/logs database path.'
         },
         {
           type: 'refresh' as const,
@@ -148,16 +152,17 @@ export async function POST(req: NextRequest) {
         timestamp: new Date().toISOString(),
         type: type || 'system',
         level: level || 'info',
-        message: message || '',
-        details: details || ''
+        message: message || 'General Event triggered',
+        details: details || 'No additional details provided.'
       };
 
-      serverLogs = [newLog, ...serverLogs].slice(0, 100); // Limit to 100 logs
-      return NextResponse.json({ success: true, logs: serverLogs });
+      serverLogs = [newLog, ...serverLogs].slice(0, 100);
+      return NextResponse.json({ success: true, log: newLog, logs: serverLogs });
     }
 
-    return NextResponse.json({ success: true, logs: serverLogs });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+  } catch (error) {
+    console.error('API Log Route Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

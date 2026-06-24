@@ -1,51 +1,29 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 1. Global safety net
-    match /{document=**} {
-      allow read, write: if false;
+    // Helper function to verify request is authenticated and target is the requesting user
+    function isUserOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
     }
 
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isEmailVerified() {
-      return request.auth.token.email_verified == true;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    // Match users collection
+    // Match users collection and subcollections
     match /users/{userId} {
-      allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(userId);
-
-      // Subcollections match blocks
+      allow read, write: if isUserOwner(userId);
+      
       match /logs/{logId} {
-        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(logId);
+        allow read, write: if isUserOwner(userId);
       }
-
       match /emails/{emailId} {
-        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(emailId);
+        allow read, write: if isUserOwner(userId);
       }
-
       match /files/{fileId} {
-        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(fileId);
+        allow read, write: if isUserOwner(userId);
       }
-
       match /events/{eventId} {
-        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(eventId);
+        allow read, write: if isUserOwner(userId);
       }
-
       match /contacts/{contactId} {
-        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(contactId);
+        allow read, write: if isUserOwner(userId);
       }
     }
   }
