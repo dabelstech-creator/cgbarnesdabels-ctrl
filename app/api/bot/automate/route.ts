@@ -1,116 +1,73 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
+import { db } from "../../../../lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, logContext } = await req.json();
+    const body = await req.json();
+    const { action } = body;
 
-    if (!message) {
-      return NextResponse.json({ error: "Message is required." }, { status: 400 });
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({
-        success: true,
-        reply: "Hello! I am your Workspace Automation Bot. I notice that the **GEMINI_API_KEY** is not configured in the server environment yet. Please add your key in the **Settings > Secrets** panel. For now, I'm running in local safe-mode, but I can still help you simulate actions!",
-        action: "NONE"
-      });
-    }
-
-    // Initialize the official @google/genai SDK with AI Studio build User-Agent header
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
-
-    const systemInstruction = `You are a Live Workspace Automation Bot integrated directly into the Workspace Sync dashboard.
-Your job is to assist the user (cgbarnesdabels@gmail.com) in monitoring, auditing, and automating their Google Workspace pipelines.
-You can Conversate intelligently and trigger specific executable workspace automations by selecting one of the actions:
-- 'SYNC_SERVICE': Trigger a metadata refresh/sync on a specific service (target can be: 'gmail', 'drive', 'calendar', 'contacts', or 'all').
-- 'CLEAR_LOGS': Erase/clear the active audit trail logs.
-- 'SPAM_BATCH': Insert a batch of simulated incoming traffic logs.
-- 'ADD_SYNC_ITEM': Dynamically inject a new validated record directly into the synced ledger. This is perfect for drafting mock emails, scheduling compliance calendar meetings, index files, or adding organization contacts.
-- 'NONE': Simply talk/respond without triggering an action.
-
-Be helpful, concise, and professional. Ensure any ADD_SYNC_ITEM action includes structured, highly realistic content suited to the user's intent.`;
-
-    const prompt = `User Message: "${message}"
-
-Current logs context (for situational awareness):
-${JSON.stringify(logContext || [])}
-
-Analyze the user's request and reply in the structured JSON schema format provided.`;
+    const actionText = action || "System Check";
+    
+    // Generate intelligent description of the automated action using Gemini
+    const systemPrompt = `You are "Aero-Bot", an automated workspace operations and orchestration AI bot.
+The user triggered the action: "${actionText}".
+Describe the detailed technical operations you are performing to execute this action in a highly professional, polite, and reassuring tone.
+Keep it concise (2-4 sentences). List a couple of realistic simulated server tasks (e.g. flushing DNS caches, syncing database shards, verifying Auth0 certificates, rotating security salts, checking background processes).`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            reply: { 
-              type: Type.STRING, 
-              description: "A friendly, professional conversational markdown reply describing what you are doing to assist." 
-            },
-            action: { 
-              type: Type.STRING, 
-              description: "The automation action to run.",
-              enum: ["SYNC_SERVICE", "CLEAR_LOGS", "SPAM_BATCH", "ADD_SYNC_ITEM", "NONE"]
-            },
-            actionTarget: { 
-              type: Type.STRING, 
-              description: "The specific service target for SYNC_SERVICE: 'gmail', 'drive', 'calendar', 'contacts', 'all', or empty if not applicable." 
-            },
-            syncItem: {
-              type: Type.OBJECT,
-              description: "Structured item parameters if action is 'ADD_SYNC_ITEM'. Otherwise ignore or omit.",
-              properties: {
-                source: { 
-                  type: Type.STRING, 
-                  description: "Service source of the sync item. Must be: 'gmail' | 'drive' | 'calendar' | 'contacts'." 
-                },
-                title: { 
-                  type: Type.STRING, 
-                  description: "Professional, realistic title (e.g., 'Draft: Q2 Financial follow-up', 'Audit meeting: SOC2 Checkpoint')." 
-                },
-                subtitle: { 
-                  type: Type.STRING, 
-                  description: "Short descriptive subtitle (e.g. 'Created via AI automation agent')." 
-                },
-                details: { 
-                  type: Type.STRING, 
-                  description: "Longer detailed logs or actions summary." 
-                }
-              },
-              required: ["source", "title", "subtitle", "details"]
-            }
-          },
-          required: ["reply", "action"]
-        }
-      }
+      contents: systemPrompt,
     });
 
-    const resultText = response.text || "{}";
-    const resultObj = JSON.parse(resultText);
+    const botMessage = response.text || `Executed automated workspace action: ${actionText} successfully. All systems nominal.`;
+
+    // Create system and sync logs based on the action to push to Firestore
+    const logsCollection = collection(db, "logs");
+    
+    // Log 1: Bot action initiated
+    await addDoc(logsCollection, {
+      type: "system",
+      level: "info",
+      message: `AI Bot triggered operation: ${actionText}.`,
+      details: `Initiated by Workspace Automation Orchestrator. Spinning up background thread...`,
+      timestamp: serverTimestamp(),
+    });
+
+    // Log 2: Bot execution success details
+    const cleanDetails = botMessage.replace(/[\n\r]/g, " ");
+    await addDoc(logsCollection, {
+      type: actionText.toLowerCase().includes("security") ? "system" : "sync",
+      level: "success",
+      message: `AI Bot completed: ${actionText}.`,
+      details: cleanDetails,
+      timestamp: serverTimestamp(),
+    });
 
     return NextResponse.json({
       success: true,
-      ...resultObj
+      bot: {
+        name: "Aero-Bot",
+        status: "Online",
+        lastAction: actionText,
+        message: botMessage,
+      }
     });
   } catch (error: any) {
-    console.error("Workspace Bot Automation Error:", error);
-    return NextResponse.json({
-      success: false,
-      error: error.message || "Internal server error during bot reasoning.",
-      reply: "I encountered a minor error connecting to my Gemini automation circuits. Let's try running your instruction again shortly!",
-      action: "NONE"
-    }, { status: 500 });
+    console.error("Error in workspace bot automator route:", error);
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to process automation action" },
+      { status: 500 }
+    );
   }
 }

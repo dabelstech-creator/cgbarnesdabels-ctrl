@@ -1,8 +1,6 @@
 {
   "name": "Workspace Dashboard",
-  "description": "Enterprise Google Workspace live status & compliance monitor with Firestore-backed real-time audit logs, mock sync controls, and quotas.",
+  "description": "Auth0-secured workspace automation and AI bot dashboard with Firebase Firestore real-time status syncing.",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -2,32 +2,32 @@
   "name": "workspace-dashboard",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev",
     "build": "next build",
-    "start": "next start -p 3000",
+    "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@google/genai": "latest",
-    "firebase": "^11.1.0",
-    "firebase-admin": "^12.7.0",
-    "lucide-react": "^0.468.0",
-    "motion": "^11.15.0",
-    "next": "^16.3.0-canary.63",
-    "postcss": "^8.4.49",
+    "d3": "^7.8.5",
+    "firebase": "^10.8.0",
+    "lucide-react": "^0.344.0",
+    "motion": "^11.0.8",
+    "next": "canary",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "recharts": "^2.12.2"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.0.0-alpha.30",
-    "@types/node": "^20.17.9",
-    "@types/react": "^19.0.1",
-    "@types/react-dom": "^19.0.1",
-    "eslint": "^9.16.0",
-    "eslint-config-next": "^16.3.0-canary.63",
-    "tailwindcss": "^4.0.0-alpha.30",
-    "typescript": "^5.7.2"
+    "@tailwindcss/postcss": "^4.3.1",
+    "@types/node": "^20.11.24",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "canary",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.3.3"
   }
 }

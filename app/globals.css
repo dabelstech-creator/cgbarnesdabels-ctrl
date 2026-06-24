@@ -15,18 +15,21 @@
   }
 }
 
-/* Custom scrollbar for terminal/logs */
+/* Scrollbar customization */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.4);
+  background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: rgba(139, 92, 246, 0.2);
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.4);
 }

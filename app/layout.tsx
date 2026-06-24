@@ -13,8 +13,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Workspace Integration Dashboard",
-  description: "Enterprise Workspace logs sync and compliance control center.",
+  title: "Workspace Automation Dashboard",
+  description: "Secure, automated workspace status and bot orchestration interface.",
 };
 
 export default function RootLayout({
@@ -23,8 +23,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} dark`}>
-      <body className="font-sans antialiased bg-[#030712] text-slate-100 min-h-screen">
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <body className="antialiased bg-gray-950 text-gray-100 font-sans min-h-screen">
         {children}
       </body>
     </html>
