@@ -794,7 +794,7 @@ export default function Dashboard() {
       setTimeout(async () => {
         try {
           // Fire API validation endpoint to trigger real validation
-          const res = await fetch("/api/auth/auth0/validate", {
+          const res = await fetch("/api/auth-validate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -878,7 +878,7 @@ export default function Dashboard() {
   const runBotAction = async (actionName: string) => {
     setBotStatus("Executing Task...");
     try {
-      const res = await fetch("/api/bot/automate", {
+      const res = await fetch("/api/bot-automate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: actionName }),
@@ -910,7 +910,7 @@ export default function Dashboard() {
   const executeSecurityAudit = async () => {
     setIsAuditing(true);
     try {
-      const res = await fetch("/api/security/audit", {
+      const res = await fetch("/api/security-audit", {
         method: "POST",
       });
       const data = await res.json();
