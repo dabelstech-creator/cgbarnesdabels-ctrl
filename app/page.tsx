@@ -15,7 +15,11 @@ import {
   Workflow,
   CheckCircle2,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  Flame,
+  Trash2,
+  Play,
+  Pause
 } from 'lucide-react';
 import WorkspaceSync from '@/components/WorkspaceSync';
 
@@ -103,6 +107,79 @@ export default function Page() {
       setIsRefreshingQuotas(false);
       handleLogAdded('refresh', 'success', 'API Quota registries refreshed.', 'Successfully polled developer credentials. All endpoints nominal.');
     }, 800);
+  };
+
+  const [isAutoSpamming, setIsAutoSpamming] = useState(false);
+
+  // Auto-Spammer effect to simulate ongoing traffic activity
+  useEffect(() => {
+    if (!isAutoSpamming) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'spam',
+            count: 1
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setLogs(data.logs);
+
+          // Gently randomize active meters slightly to simulate live active traffic load
+          if (Math.random() > 0.4) {
+            setQuotaGmail(prev => Math.min(100, Math.max(0, prev + Math.floor(Math.random() * 3) - 1)));
+            setQuotaDrive(prev => Math.min(100, Math.max(0, prev + Math.floor(Math.random() * 2) - 1)));
+            setQuotaCalendar(prev => Math.min(100, Math.max(0, prev + Math.floor(Math.random() * 3) - 1)));
+            setQuotaContacts(prev => Math.min(100, Math.max(0, prev + Math.floor(Math.random() * 2) - 1)));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to auto-spam:', err);
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [isAutoSpamming]);
+
+  const handleSpamBatch = async () => {
+    try {
+      const res = await fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'spam',
+          count: 12
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLogs(data.logs);
+      }
+    } catch (err) {
+      console.error('Failed to spam batch logs:', err);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    try {
+      const res = await fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'clear'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLogs([]);
+      }
+    } catch (err) {
+      console.error('Failed to clear logs:', err);
+    }
   };
 
   return (
@@ -248,14 +325,61 @@ export default function Page() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-violet-600/5 blur-3xl rounded-full -z-10" />
             
             <div>
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800/60">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 pb-3 border-b border-slate-800/60 gap-3">
                 <div className="flex items-center space-x-2">
                   <Terminal className="w-4 h-4 text-violet-400" />
                   <h3 className="text-xs font-bold font-mono text-slate-200 uppercase tracking-wider">Live Integration Audit Trail</h3>
                 </div>
-                <div className="flex items-center space-x-2 font-mono text-[10px] text-slate-500">
-                  <Cpu className="w-3.5 h-3.5" />
-                  <span>NODE STATE: RUNNING</span>
+
+                <div className="flex items-center flex-wrap gap-2">
+                  <button 
+                    onClick={() => setIsAutoSpamming(!isAutoSpamming)}
+                    className={`flex items-center gap-1.5 border px-2 py-1 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-all ${
+                      isAutoSpamming 
+                        ? 'bg-violet-950/40 border-violet-500/50 text-violet-300 hover:border-violet-400' 
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-violet-500/30 hover:text-slate-200'
+                    }`}
+                    title="Simulate continuous traffic streaming"
+                  >
+                    {isAutoSpamming ? (
+                      <>
+                        <span className="relative flex h-1.5 w-1.5 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-violet-400"></span>
+                        </span>
+                        <Pause className="w-3 h-3 text-violet-400 shrink-0" />
+                        <span>SPAMMING...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>AUTO-SPAM</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button 
+                    onClick={handleSpamBatch}
+                    className="flex items-center gap-1 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-rose-500/30 hover:text-rose-300 px-2 py-1 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-all text-slate-400"
+                    title="Spam a burst of 12 Workspace integration logs"
+                  >
+                    <Flame className="w-3 h-3 text-rose-400 shrink-0" />
+                    <span>SPAM BATCH</span>
+                  </button>
+
+                  <button 
+                    onClick={handleClearLogs}
+                    className="flex items-center gap-1 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-red-500/30 hover:text-red-400 px-2 py-1 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-all text-slate-400"
+                    title="Purge logs from memory buffer"
+                  >
+                    <Trash2 className="w-3 h-3 text-red-400 shrink-0" />
+                    <span>CLEAR</span>
+                  </button>
+
+                  <div className="hidden sm:flex items-center space-x-1 font-mono text-[9px] text-slate-500 border-l border-slate-800/80 pl-2">
+                    <Cpu className="w-3 h-3" />
+                    <span>LIVE BUFFER</span>
+                  </div>
                 </div>
               </div>
 
