@@ -72,6 +72,40 @@ interface LogEntry {
   timestamp: any;
 }
 
+function AnimatedNumber({ value }: { value: number }) {
+  const [displayValue, setDisplayValue] = useState(value);
+
+  useEffect(() => {
+    let startTimestamp: number | null = null;
+    const startValue = displayValue;
+    const diff = value - startValue;
+    if (diff === 0) return;
+
+    const duration = 600; // 600ms transition
+    let animationFrameId: number;
+
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+      const ease = progress * (2 - progress); // quadratic easing out
+      const current = startValue + diff * ease;
+      
+      setDisplayValue(Math.round(current));
+
+      if (progress < 1) {
+        animationFrameId = requestAnimationFrame(step);
+      } else {
+        setDisplayValue(value);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [value]);
+
+  return <span>{displayValue}</span>;
+}
+
 export default function Dashboard() {
   // Auth states
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -135,6 +169,46 @@ export default function Dashboard() {
 
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+
+  // Pulse animation states on updates
+  const currentHeartRate = biometricData.length > 0 ? biometricData[biometricData.length - 1].heartRate : 72;
+  const currentSteps = biometricData.length > 0 ? biometricData[biometricData.length - 1].steps : 0;
+  const currentCalories = biometricData.length > 0 ? biometricData[biometricData.length - 1].calories : 0;
+
+  const [lastHeartRate, setLastHeartRate] = useState(currentHeartRate);
+  const [lastSteps, setLastSteps] = useState(currentSteps);
+  const [lastCalories, setLastCalories] = useState(currentCalories);
+
+  const [pulseHeartRate, setPulseHeartRate] = useState(false);
+  const [pulseSteps, setPulseSteps] = useState(false);
+  const [pulseCalories, setPulseCalories] = useState(false);
+
+  useEffect(() => {
+    if (currentHeartRate !== lastHeartRate) {
+      setPulseHeartRate(true);
+      const timer = setTimeout(() => setPulseHeartRate(false), 800);
+      setLastHeartRate(currentHeartRate);
+      return () => clearTimeout(timer);
+    }
+  }, [currentHeartRate, lastHeartRate]);
+
+  useEffect(() => {
+    if (currentSteps !== lastSteps) {
+      setPulseSteps(true);
+      const timer = setTimeout(() => setPulseSteps(false), 800);
+      setLastSteps(currentSteps);
+      return () => clearTimeout(timer);
+    }
+  }, [currentSteps, lastSteps]);
+
+  useEffect(() => {
+    if (currentCalories !== lastCalories) {
+      setPulseCalories(true);
+      const timer = setTimeout(() => setPulseCalories(false), 800);
+      setLastCalories(currentCalories);
+      return () => clearTimeout(timer);
+    }
+  }, [currentCalories, lastCalories]);
 
   // Helper function to format data as CSV
   const getBiometricCSV = () => {
@@ -1253,36 +1327,36 @@ export default function Dashboard() {
                       {/* Live Indicators */}
                       <div className="grid grid-cols-3 gap-3">
                         {/* Heart Rate Indicator */}
-                        <div className="bg-slate-950/60 border border-slate-850 p-3 rounded-xl flex flex-col items-center justify-center text-center">
+                        <div className={`bg-slate-950/60 border p-3 rounded-xl flex flex-col items-center justify-center text-center transition-all duration-500 ${pulseHeartRate ? "border-rose-500/50 bg-rose-950/10 shadow-[0_0_15px_rgba(244,63,94,0.15)] scale-105" : "border-slate-850"}`}>
                           <div className="flex items-center justify-center h-8 w-8 rounded-full bg-rose-950/20 border border-rose-900/30 text-rose-400 mb-2">
                             <Heart className={`h-4 w-4 ${isSimulatingBiometrics ? "animate-pulse" : ""}`} />
                           </div>
                           <span className="text-[10px] uppercase font-mono text-slate-500">Pulse</span>
                           <span className="text-base font-bold text-white font-mono mt-0.5">
-                            {biometricData.length > 0 ? biometricData[biometricData.length - 1].heartRate : 72}
+                            <AnimatedNumber value={biometricData.length > 0 ? biometricData[biometricData.length - 1].heartRate : 72} />
                             <span className="text-[10px] text-rose-400 pl-0.5">BPM</span>
                           </span>
                         </div>
 
                         {/* Steps Indicator */}
-                        <div className="bg-slate-950/60 border border-slate-850 p-3 rounded-xl flex flex-col items-center justify-center text-center">
+                        <div className={`bg-slate-950/60 border p-3 rounded-xl flex flex-col items-center justify-center text-center transition-all duration-500 ${pulseSteps ? "border-emerald-500/50 bg-emerald-950/10 shadow-[0_0_15px_rgba(16,185,129,0.15)] scale-105" : "border-slate-850"}`}>
                           <div className="flex items-center justify-center h-8 w-8 rounded-full bg-emerald-950/20 border border-emerald-900/30 text-emerald-400 mb-2">
                             <Footprints className="h-4 w-4" />
                           </div>
                           <span className="text-[10px] uppercase font-mono text-slate-500">Steps</span>
                           <span className="text-base font-bold text-white font-mono mt-0.5">
-                            {biometricData.length > 0 ? biometricData[biometricData.length - 1].steps : 0}
+                            <AnimatedNumber value={biometricData.length > 0 ? biometricData[biometricData.length - 1].steps : 0} />
                           </span>
                         </div>
 
                         {/* Calories Indicator */}
-                        <div className="bg-slate-950/60 border border-slate-850 p-3 rounded-xl flex flex-col items-center justify-center text-center">
+                        <div className={`bg-slate-950/60 border p-3 rounded-xl flex flex-col items-center justify-center text-center transition-all duration-500 ${pulseCalories ? "border-amber-500/50 bg-amber-950/10 shadow-[0_0_15px_rgba(245,158,11,0.15)] scale-105" : "border-slate-850"}`}>
                           <div className="flex items-center justify-center h-8 w-8 rounded-full bg-amber-950/20 border border-amber-900/30 text-amber-400 mb-2">
                             <Flame className="h-4 w-4" />
                           </div>
                           <span className="text-[10px] uppercase font-mono text-slate-500">Burned</span>
                           <span className="text-base font-bold text-white font-mono mt-0.5">
-                            {biometricData.length > 0 ? biometricData[biometricData.length - 1].calories : 0}
+                            <AnimatedNumber value={biometricData.length > 0 ? biometricData[biometricData.length - 1].calories : 0} />
                             <span className="text-[10px] text-amber-400 pl-0.5 font-sans">kcal</span>
                           </span>
                         </div>
