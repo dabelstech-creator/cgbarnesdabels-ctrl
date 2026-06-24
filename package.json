@@ -14,7 +14,7 @@
     "firebase": "^10.8.0",
     "framer-motion": "^12.41.0",
     "lucide-react": "^1.21.0",
-    "next": "15.1.0",
+    "next": "15.5.19",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "recharts": "^2.12.2"
@@ -25,7 +25,7 @@
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
     "eslint": "^8.57.0",
-    "eslint-config-next": "15.1.0",
+    "eslint-config-next": "15.5.19",
     "postcss": "^8.4.35",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.3.3"

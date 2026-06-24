@@ -1,4 +1,4 @@
-"use client";
+/* eslint-disable @next/next/no-html-link-for-pages */
 
 export default function NotFound() {
   return (
