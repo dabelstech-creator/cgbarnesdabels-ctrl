@@ -50,20 +50,16 @@ import {
   Upload,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend,
-} from "recharts";
+import dynamic from "next/dynamic";
+
+const WorkspaceCharts = dynamic(() => import("../components/WorkspaceCharts"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full flex items-center justify-center font-mono text-xs text-slate-500">
+      Loading telemetry engine...
+    </div>
+  ),
+});
 
 interface LogEntry {
   id: string;
@@ -951,6 +947,26 @@ export default function Dashboard() {
     }
   };
 
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-[#030712] text-slate-100 flex flex-col items-center justify-center font-sans">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-lg blur-sm opacity-50 animate-pulse"></div>
+            <div className="relative bg-slate-900 border border-violet-500 p-3 rounded-lg">
+              <svg className="animate-spin h-8 w-8 text-violet-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-xl font-semibold tracking-tight text-white">Loading Workspace Portal...</h2>
+          <p className="text-xs text-slate-400 font-mono">Initializing secure orchestration core</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#030712] text-slate-100 flex flex-col font-sans selection:bg-violet-500 selection:text-white">
       {/* GLOBAL HEADER */}
@@ -1797,95 +1813,7 @@ export default function Dashboard() {
                       ) : (
                         <div className="h-[280px] w-full relative">
                           {/* Recharts Charts Selection logic */}
-                          <ResponsiveContainer width="100%" height="100%">
-                            {biometricChartType === "combined" ? (
-                              <LineChart data={biometricData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-                                <defs>
-                                  <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2}/>
-                                    <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                                  </linearGradient>
-                                  <linearGradient id="colorSteps" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                  </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                <XAxis 
-                                  dataKey="timestamp" 
-                                  tickFormatter={(time) => {
-                                    if (time instanceof Date) return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                    return "";
-                                  }} 
-                                  stroke="#64748b" 
-                                  style={{ fontSize: 9, fontFamily: 'monospace' }}
-                                />
-                                <YAxis yAxisId="left" stroke="#f43f5e" style={{ fontSize: 9, fontFamily: 'monospace' }} domain={[40, 'auto']} />
-                                <YAxis yAxisId="right" orientation="right" stroke="#10b981" style={{ fontSize: 9, fontFamily: 'monospace' }} />
-                                <Tooltip
-                                  contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: 8 }}
-                                  labelStyle={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 10 }}
-                                  itemStyle={{ fontSize: 11 }}
-                                  labelFormatter={(time) => time instanceof Date ? time.toLocaleTimeString() : time}
-                                />
-                                <Legend wrapperStyle={{ fontSize: 10, fontFamily: 'monospace', paddingTop: 10 }} />
-                                <Line yAxisId="left" type="monotone" dataKey="heartRate" name="Heart Rate (BPM)" stroke="#f43f5e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                                <Line yAxisId="right" type="monotone" dataKey="steps" name="Cumulative Steps" stroke="#10b981" strokeWidth={2} dot={false} />
-                                <Line yAxisId="right" type="monotone" dataKey="calories" name="Calories (kcal)" stroke="#f59e0b" strokeWidth={1.5} dot={false} />
-                              </LineChart>
-                            ) : biometricChartType === "heartRate" ? (
-                              <AreaChart data={biometricData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-                                <defs>
-                                  <linearGradient id="colorHrArea" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.4}/>
-                                    <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                                  </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                <XAxis 
-                                  dataKey="timestamp" 
-                                  tickFormatter={(time) => {
-                                    if (time instanceof Date) return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                    return "";
-                                  }} 
-                                  stroke="#64748b" 
-                                  style={{ fontSize: 9, fontFamily: 'monospace' }}
-                                />
-                                <YAxis stroke="#f43f5e" style={{ fontSize: 9, fontFamily: 'monospace' }} domain={[50, 'auto']} />
-                                <Tooltip
-                                  contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: 8 }}
-                                  labelStyle={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 10 }}
-                                  itemStyle={{ fontSize: 11, color: '#f43f5e' }}
-                                  labelFormatter={(time) => time instanceof Date ? time.toLocaleTimeString() : time}
-                                />
-                                <Area type="monotone" dataKey="heartRate" name="Heart Rate (BPM)" stroke="#f43f5e" strokeWidth={2.5} fillOpacity={1} fill="url(#colorHrArea)" activeDot={{ r: 5 }} />
-                              </AreaChart>
-                            ) : (
-                              <BarChart data={biometricData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                <XAxis 
-                                  dataKey="timestamp" 
-                                  tickFormatter={(time) => {
-                                    if (time instanceof Date) return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                    return "";
-                                  }} 
-                                  stroke="#64748b" 
-                                  style={{ fontSize: 9, fontFamily: 'monospace' }}
-                                />
-                                <YAxis yAxisId="left" stroke="#10b981" style={{ fontSize: 9, fontFamily: 'monospace' }} />
-                                <YAxis yAxisId="right" orientation="right" stroke="#f59e0b" style={{ fontSize: 9, fontFamily: 'monospace' }} />
-                                <Tooltip
-                                  contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: 8 }}
-                                  labelStyle={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 10 }}
-                                  itemStyle={{ fontSize: 11 }}
-                                  labelFormatter={(time) => time instanceof Date ? time.toLocaleTimeString() : time}
-                                />
-                                <Legend wrapperStyle={{ fontSize: 10, fontFamily: 'monospace', paddingTop: 10 }} />
-                                <Bar yAxisId="left" dataKey="steps" name="Cumulative Steps" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                <Line yAxisId="right" type="monotone" dataKey="calories" name="Calories (kcal)" stroke="#f59e0b" strokeWidth={2.5} dot={true} />
-                              </BarChart>
-                            )}
-                          </ResponsiveContainer>
+                          <WorkspaceCharts biometricData={biometricData} biometricChartType={biometricChartType} />
                         </div>
                       )}
                     </div>
