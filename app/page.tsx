@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { db } from "../lib/firebase";
+import { db, auth } from "../lib/firebase";
 import {
   collection,
   addDoc,
@@ -13,6 +13,7 @@ import {
   doc,
   setDoc,
   deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 import {
   ShieldCheck,
@@ -46,6 +47,7 @@ import {
   Code,
   Copy,
   Check,
+  Upload,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -70,6 +72,53 @@ interface LogEntry {
   message: string;
   details: string;
   timestamp: any;
+}
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth?.currentUser?.uid || null,
+      email: auth?.currentUser?.email || null,
+      emailVerified: auth?.currentUser?.emailVerified || null,
+      isAnonymous: auth?.currentUser?.isAnonymous || null,
+      tenantId: auth?.currentUser?.tenantId || null,
+      providerInfo: auth?.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
 }
 
 function AnimatedNumber({ value }: { value: number }) {
@@ -244,6 +293,172 @@ export default function Dashboard() {
     navigator.clipboard.writeText(csvContent);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  // CSV Import States
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvParsedData, setCsvParsedData] = useState<any[]>([]);
+  const [isUploadingCSV, setIsUploadingCSV] = useState(false);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [csvSuccess, setCsvSuccess] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const parseCSV = (text: string) => {
+    const lines = text.split(/\r?\n/);
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split(",").map(h => h.trim().replace(/^["']|["']$/g, "").toLowerCase());
+
+    const result: any[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(",");
+      const values = matches.map(v => v.trim().replace(/^["']|["']$/g, ""));
+
+      if (values.length === 0) continue;
+
+      const entry: any = {};
+      
+      const timeIdx = headers.findIndex(h => h.includes("time") || h.includes("date") || h.includes("stamp"));
+      const hrIdx = headers.findIndex(h => h.includes("heart") || h.includes("bpm") || h.includes("pulse"));
+      const stepsIdx = headers.findIndex(h => h.includes("step"));
+      const calsIdx = headers.findIndex(h => h.includes("cal") || h.includes("burn") || h.includes("kcal"));
+      const actIdx = headers.findIndex(h => h.includes("act") || h.includes("zone") || h.includes("state"));
+
+      let timestamp = new Date();
+      if (timeIdx !== -1 && values[timeIdx]) {
+        const parsedDate = new Date(values[timeIdx]);
+        if (!isNaN(parsedDate.getTime())) {
+          timestamp = parsedDate;
+        }
+      } else {
+        timestamp = new Date(Date.now() - (lines.length - i) * 60 * 1000);
+      }
+
+      let heartRate = 72;
+      if (hrIdx !== -1 && values[hrIdx]) {
+        const parsedHR = parseInt(values[hrIdx], 10);
+        if (!isNaN(parsedHR)) heartRate = parsedHR;
+      }
+
+      let steps = 0;
+      if (stepsIdx !== -1 && values[stepsIdx]) {
+        const parsedSteps = parseInt(values[stepsIdx], 10);
+        if (!isNaN(parsedSteps)) steps = parsedSteps;
+      }
+
+      let calories = 0;
+      if (calsIdx !== -1 && values[calsIdx]) {
+        const parsedCals = parseInt(values[calsIdx], 10);
+        if (!isNaN(parsedCals)) calories = parsedCals;
+      }
+
+      let activity = "Walking";
+      if (actIdx !== -1 && values[actIdx]) {
+        activity = values[actIdx];
+      }
+
+      entry.timestamp = timestamp;
+      entry.heartRate = heartRate;
+      entry.steps = steps;
+      entry.calories = calories;
+      entry.activity = activity;
+
+      result.push(entry);
+    }
+
+    return result;
+  };
+
+  const handleCSVImport = async () => {
+    if (!db) {
+      setCsvError("Database connection is offline.");
+      return;
+    }
+    if (csvParsedData.length === 0) {
+      setCsvError("No data parsed to upload.");
+      return;
+    }
+
+    setIsUploadingCSV(true);
+    setCsvError(null);
+    setCsvSuccess(null);
+
+    const path = "biometrics";
+    try {
+      const batchLimit = 500;
+      let successCount = 0;
+
+      for (let i = 0; i < csvParsedData.length; i += batchLimit) {
+        const chunk = csvParsedData.slice(i, i + batchLimit);
+        const batch = writeBatch(db);
+
+        chunk.forEach(item => {
+          const newDocRef = doc(collection(db, path));
+          batch.set(newDocRef, {
+            heartRate: item.heartRate,
+            steps: item.steps,
+            calories: item.calories,
+            activity: item.activity,
+            timestamp: item.timestamp,
+          });
+        });
+
+        await batch.commit();
+        successCount += chunk.length;
+      }
+
+      // Log success event to system logs
+      await addDoc(collection(db, "logs"), {
+        type: "system",
+        level: "success",
+        message: `Imported ${successCount} biometric records via CSV.`,
+        details: `File: ${csvFile?.name || "unnamed.csv"} | Successfully batch-seeded ${successCount} points.`,
+        timestamp: serverTimestamp(),
+      });
+
+      setCsvSuccess(`Successfully batch-seeded ${successCount} records!`);
+      setCsvFile(null);
+      setCsvParsedData([]);
+    } catch (err) {
+      console.error("CSV upload failed:", err);
+      setCsvError("Database rejected batch-write. Ensure schema rules match.");
+      handleFirestoreError(err, OperationType.WRITE, path);
+    } finally {
+      setIsUploadingCSV(false);
+    }
+  };
+
+  const handleFileProcess = (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setCsvError("Only CSV files are supported.");
+      setCsvFile(null);
+      setCsvParsedData([]);
+      return;
+    }
+    setCsvError(null);
+    setCsvSuccess(null);
+    setCsvFile(file);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      try {
+        const parsed = parseCSV(text);
+        if (parsed.length === 0) {
+          setCsvError("No valid rows found. Check your CSV header names.");
+          setCsvParsedData([]);
+        } else {
+          setCsvParsedData(parsed);
+        }
+      } catch (err) {
+        setCsvError("Error parsing CSV. Please check formatting.");
+        setCsvParsedData([]);
+      }
+    };
+    reader.readAsText(file);
   };
 
   const latestStepsRef = useRef(7700);
@@ -1468,6 +1683,93 @@ export default function Dashboard() {
                             Upload to Firestore
                           </button>
                         </form>
+                      </div>
+
+                      {/* CSV Historical Seeder */}
+                      <div className="bg-slate-950/80 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
+                        <h4 className="text-[10px] font-bold text-slate-400 uppercase font-mono tracking-wider flex items-center space-x-1">
+                          <Upload className="h-3.5 w-3.5 text-violet-400" />
+                          <span>CSV Historical Seeder</span>
+                        </h4>
+
+                        <div
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setIsDragOver(true);
+                          }}
+                          onDragLeave={() => setIsDragOver(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setIsDragOver(false);
+                            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                              handleFileProcess(e.dataTransfer.files[0]);
+                            }
+                          }}
+                          onClick={() => {
+                            document.getElementById("csv-file-input")?.click();
+                          }}
+                          className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center space-y-1.5 ${isDragOver ? "border-violet-500 bg-violet-950/10" : "border-slate-800 hover:border-slate-700 bg-slate-900/20"}`}
+                        >
+                          <input
+                            id="csv-file-input"
+                            type="file"
+                            accept=".csv"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleFileProcess(e.target.files[0]);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                          <Upload className={`h-6 w-6 ${isDragOver ? "text-violet-400 scale-110" : "text-slate-500"} transition-all duration-200`} />
+                          <div className="text-[11px] font-medium text-slate-300">
+                            {csvFile ? csvFile.name : "Drag & drop CSV or click to browse"}
+                          </div>
+                          <div className="text-[9px] text-slate-500 font-mono">
+                            Supports columns: Timestamp, Heart Rate, Steps, Calories
+                          </div>
+                        </div>
+
+                        {csvError && (
+                          <div className="p-2 bg-red-950/30 border border-red-900/40 rounded-lg text-[10px] text-red-400 font-mono flex items-start space-x-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+                            <span>{csvError}</span>
+                          </div>
+                        )}
+
+                        {csvSuccess && (
+                          <div className="p-2 bg-emerald-950/30 border border-emerald-900/40 rounded-lg text-[10px] text-emerald-400 font-mono flex items-start space-x-1.5">
+                            <CheckCircle className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                            <span>{csvSuccess}</span>
+                          </div>
+                        )}
+
+                        {csvParsedData.length > 0 && (
+                          <div className="bg-slate-900/60 border border-slate-850 p-2 rounded-lg space-y-2">
+                            <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                              <span>Parsed Records:</span>
+                              <span className="text-white font-bold">{csvParsedData.length} entries</span>
+                            </div>
+                            
+                            <button
+                              onClick={handleCSVImport}
+                              disabled={isUploadingCSV}
+                              className="w-full bg-violet-600 hover:bg-violet-500 text-white font-mono text-[10px] font-bold uppercase rounded py-1.5 transition duration-150 flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                            >
+                              {isUploadingCSV ? (
+                                <>
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                  <span>Writing Batch to Firestore...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="h-3 w-3" />
+                                  <span>Seed Database via CSV</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                     </div>
