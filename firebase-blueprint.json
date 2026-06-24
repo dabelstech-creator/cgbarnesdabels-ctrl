@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile document",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "connectedServices": { "type": "array" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "Audit log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "type": { "type": "string" },
+        "level": { "type": "string" },
+        "message": { "type": "string" },
+        "details": { "type": "string" },
+        "provider": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "type", "level", "message"]
+    },
+    "Email": {
+      "title": "Email",
+      "description": "Gmail message metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subject": { "type": "string" },
+        "from": { "type": "string" },
+        "date": { "type": "string" },
+        "snippet": { "type": "string" }
+      },
+      "required": ["id", "subject", "from"]
+    },
+    "DriveFile": {
+      "title": "DriveFile",
+      "description": "Google Drive file metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "webViewLink": { "type": "string" },
+        "modifiedTime": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "Google Calendar event details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "summary": { "type": "string" },
+        "start": { "type": "string" },
+        "end": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "summary", "start"]
+    },
+    "Contact": {
+      "title": "Contact",
+      "description": "Google Contact entry details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/users/{userId}/logs/{logId}": {
+      "schema": "Log",
+      "description": "User specific logs and sync audit history"
+    },
+    "/users/{userId}/emails/{emailId}": {
+      "schema": "Email",
+      "description": "Synced Gmail messages"
+    },
+    "/users/{userId}/files/{fileId}": {
+      "schema": "DriveFile",
+      "description": "Synced Drive files"
+    },
+    "/users/{userId}/events/{eventId}": {
+      "schema": "CalendarEvent",
+      "description": "Synced Calendar events"
+    },
+    "/users/{userId}/contacts/{contactId}": {
+      "schema": "Contact",
+      "description": "Synced Google Contacts"
+    }
+  }
+}

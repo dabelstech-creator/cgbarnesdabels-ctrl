@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Match users collection
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(userId);
+
+      // Subcollections match blocks
+      match /logs/{logId} {
+        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(logId);
+      }
+
+      match /emails/{emailId} {
+        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(emailId);
+      }
+
+      match /files/{fileId} {
+        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(fileId);
+      }
+
+      match /events/{eventId} {
+        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(eventId);
+      }
+
+      match /contacts/{contactId} {
+        allow read, write: if isOwner(userId) && isEmailVerified() && isValidId(contactId);
+      }
+    }
+  }
+}

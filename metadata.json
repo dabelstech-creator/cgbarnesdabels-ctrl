@@ -1,0 +1,8 @@
+{
+  "name": "Workspace Sync Dashboard",
+  "description": "Real-time sync to Cloud Firestore for Gmail, Google Drive, Calendar, and Contacts, featuring integrated Google Picker and API health tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
