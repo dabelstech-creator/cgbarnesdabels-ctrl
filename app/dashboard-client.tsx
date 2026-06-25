@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { db, auth } from "../lib/firebase";
+import { useAuth } from "../hooks/use-auth";
 import firebaseConfig from "../firebase-applet-config.json";
 import AuthInterface from "../components/auth-interface";
 import LogViewer from "../components/log-viewer";
@@ -163,9 +164,13 @@ function AnimatedNumber({ value }: { value: number }) {
   return <span>{displayValue}</span>;
 }
 
+// Note: Skeleton is now moved inside DashboardClient to access theme state
+
 export default function Dashboard() {
+  const { user, logout } = useAuth();
+  const isAuthenticated = !!user;
+
   // Auth states
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [mockAuthenticated, setMockAuthenticated] = useState(false);
   const [authStep, setAuthStep] = useState<"idle" | "handshake" | "jwks" | "mfa" | "success">("idle");
   const [email, setEmail] = useState("");
@@ -193,6 +198,11 @@ export default function Dashboard() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
   const [isLogsLoaded, setIsLogsLoaded] = useState(false);
+
+  // Theme-aware Skeleton component
+  const Skeleton = ({ className }: { className?: string }) => (
+    <div className={`animate-pulse rounded transition-colors duration-500 ${theme === 'dark' ? 'bg-slate-800/40' : 'bg-slate-200'} ${className}`} />
+  );
 
   // Security Audit States
   const [securityScore, setSecurityScore] = useState<number>(98);
@@ -230,31 +240,58 @@ export default function Dashboard() {
   const [isMounted, setIsMounted] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
-  const exportToCSV = () => {
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("workspace-theme") as "dark" | "light";
+    if (savedTheme) {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    localStorage.setItem("workspace-theme", newTheme);
+  };
+
+  const downloadFullReport = () => {
     setIsExporting(true);
-    const headers = ["Timestamp", "Type", "Details"];
-    const csvRows = [headers.join(",")];
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `workspace_audit_report_${timestamp}.csv`;
+      
+      let csvContent = "REPORT DATA: SYSTEM AUDIT & BIOMETRIC TELEMETRY\n";
+      csvContent += `EXPORT DATE: ${new Date().toLocaleString()}\n\n`;
+      
+      // Biometrics Section
+      csvContent += "SECTION: BIOMETRIC TELEMETRY\n";
+      csvContent += "Timestamp,Heart Rate (BPM),Steps (Cumulative),Calories (Cumulative),Activity Zone\n";
+      biometricData.forEach(bio => {
+        csvContent += `${bio.timestamp.toISOString()},${bio.heartRate},${bio.steps},${bio.calories},"${bio.activity}"\n`;
+      });
+      
+      csvContent += "\nSECTION: AUDIT LOGS\n";
+      csvContent += "Timestamp,Type,Level,Message,Details\n";
+      logs.forEach(log => {
+        const timeStr = log.timestamp instanceof Date ? log.timestamp.toISOString() : new Date(log.timestamp).toISOString();
+        csvContent += `${timeStr},${log.type},${log.level},"${log.message.replace(/"/g, '""')}","${log.details.replace(/"/g, '""')}"\n`;
+      });
 
-    logs.forEach(log => {
-      csvRows.push([log.timestamp ? log.timestamp.toISOString() : "", log.action, log.details].join(","));
-    });
-    
-    biometricData.forEach(bio => {
-      csvRows.push([bio.timestamp ? bio.timestamp.toISOString() : "", bio.type, bio.value.toString()].join(","));
-    });
-    
-    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.setAttribute("hidden", "");
-    a.setAttribute("href", url);
-    a.setAttribute("download", "health_report.csv");
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    setTimeout(() => setIsExporting(false), 2000);
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", filename);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setTimeout(() => setIsExporting(false), 1500);
+    }
   };
 
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
@@ -1021,7 +1058,7 @@ export default function Dashboard() {
     }
 
     setTimeout(() => {
-      setIsAuthenticated(true);
+      // Logic handled by onAuthStateChanged in useAuth
     }, 1000);
   };
 
@@ -1131,42 +1168,57 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#030712] text-slate-100 flex flex-col font-sans selection:bg-violet-500 selection:text-white">
+    <div className={`min-h-screen transition-colors duration-500 font-sans selection:bg-amber-500 selection:text-white ${theme === 'dark' ? 'bg-[#030712] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       {/* GLOBAL HEADER */}
-      <header className="border-b border-slate-800 bg-[#090d16] px-6 py-4 sticky top-0 z-30 flex items-center justify-between shadow-lg">
+      <header className={`border-b px-6 py-4 sticky top-0 z-30 flex items-center justify-between shadow-lg transition-colors duration-500 ${theme === 'dark' ? 'border-slate-800 bg-[#090d16]' : 'border-slate-200 bg-white'}`}>
         <div className="flex items-center space-x-3">
           <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-lg blur-sm opacity-50"></div>
-            <div className="relative bg-slate-900 border border-violet-500 p-2 rounded-lg">
-              <Cpu className="h-6 w-6 text-violet-400" />
+            <div className={`absolute inset-0 rounded-lg blur-sm opacity-50 transition-colors ${theme === 'dark' ? 'bg-gradient-to-r from-amber-600 to-orange-600' : 'bg-amber-400'}`}></div>
+            <div className={`relative border p-2 rounded-lg transition-colors ${theme === 'dark' ? 'bg-slate-900 border-amber-500' : 'bg-white border-amber-200'}`}>
+              <Cpu className={`h-6 w-6 ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`} />
             </div>
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight text-white flex items-center space-x-2">
-              <span>Workspace Portal</span>
-              <span className="text-xs text-violet-400 font-mono px-2 py-0.5 bg-violet-950/40 rounded-full border border-violet-900">v3.5</span>
+            <h1 className={`text-lg font-bold tracking-tight flex items-center space-x-2 transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              <span className="uppercase font-mono">Workspace Protocol</span>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border transition-colors ${theme === 'dark' ? 'text-amber-400 bg-amber-950/40 border-amber-900' : 'text-amber-700 bg-amber-100 border-amber-200'}`}>v4.2.1</span>
             </h1>
-            <p className="text-xs text-slate-400">Auth0 Enterprise Automation Platform</p>
-            <p className="text-[10px] text-slate-500 font-mono mt-1">
-              Sync: {logs.length + biometricData.length} items | Last: {biometricData.length > 0 ? biometricData[biometricData.length - 1].timestamp.toLocaleTimeString() : "N/A"}
+            <p className={`text-[10px] font-mono uppercase tracking-widest transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>
+              Secure Management & Automation Core
             </p>
           </div>
         </div>
 
-        {/* Real-time Health Monitor */}
+        {/* Real-time Health Monitor & Actions */}
         <div className="flex items-center space-x-4">
-          <button
-            onClick={toggleMockAuth}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs transition duration-200 ${
-              mockAuthenticated
-                ? "bg-emerald-950/40 text-emerald-300 border-emerald-800"
-                : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
-            }`}
-          >
-            <LogIn className="h-3.5 w-3.5" />
-            <span>{mockAuthenticated ? "Authenticated" : "Mock Login"}</span>
-          </button>
-          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 space-x-3">
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={toggleTheme}
+              className={`p-2 rounded-xl border transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white' : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 shadow-sm'}`}
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+            >
+              {theme === 'dark' ? <Sparkles className="h-4 w-4" /> : <Database className="h-4 w-4" />}
+            </button>
+
+            <button
+              onClick={downloadFullReport}
+              disabled={isExporting}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl border font-bold text-[10px] uppercase tracking-wider transition-all shadow-lg ${
+                theme === 'dark' 
+                  ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 shadow-amber-900/5' 
+                  : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-slate-200/50'
+              } ${isExporting ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {isExporting ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              <span>{isExporting ? 'Exporting...' : 'Download Report'}</span>
+            </button>
+          </div>
+
+          <div className={`flex items-center border rounded-xl px-3 py-1.5 space-x-3 transition-colors ${theme === 'dark' ? 'bg-slate-950/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
             <div className="flex items-center space-x-2">
               <Activity className={`h-4 w-4 ${systemHealth === "Stable" ? "text-emerald-400 animate-pulse" : systemHealth === "Normal" ? "text-cyan-400" : "text-amber-500 animate-bounce"}`} />
               <span className="text-xs text-slate-300 font-medium font-mono">Firestore Link:</span>
@@ -1244,42 +1296,42 @@ export default function Dashboard() {
               exit={{ opacity: 0, y: -15 }}
               className="lg:col-span-12 flex items-center justify-center py-12"
             >
-              <div className="bg-[#090d16] border border-slate-800 p-8 rounded-2xl w-full max-w-xl relative overflow-hidden shadow-2xl">
+            <div className={`border p-8 rounded-2xl w-full max-w-xl relative overflow-hidden shadow-2xl transition-colors duration-500 ${theme === 'dark' ? 'bg-[#090d16] border-slate-800 shadow-amber-900/10' : 'bg-white border-slate-200 shadow-slate-200'}`}>
                 {/* Visual highlights */}
-                <div className="absolute -top-24 -left-24 h-48 w-48 bg-violet-600/10 rounded-full blur-2xl"></div>
-                <div className="absolute -bottom-24 -right-24 h-48 w-48 bg-indigo-600/10 rounded-full blur-2xl"></div>
+                <div className={`absolute -top-24 -left-24 h-48 w-48 rounded-full blur-2xl transition-colors ${theme === 'dark' ? 'bg-amber-600/10' : 'bg-amber-400/10'}`}></div>
+                <div className={`absolute -bottom-24 -right-24 h-48 w-48 rounded-full blur-2xl transition-colors ${theme === 'dark' ? 'bg-orange-600/10' : 'bg-orange-400/10'}`}></div>
 
                 <div className="relative text-center mb-8">
-                  <div className="mx-auto w-12 h-12 bg-violet-500/10 border border-violet-500/30 rounded-full flex items-center justify-center mb-3">
-                    <Lock className="h-6 w-6 text-violet-400" />
+                  <div className={`mx-auto w-12 h-12 border rounded-full flex items-center justify-center mb-3 transition-colors ${theme === 'dark' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-100 border-amber-200'}`}>
+                    <Lock className={`h-6 w-6 ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`} />
                   </div>
-                  <h2 className="text-2xl font-bold tracking-tight text-white font-sans">SSO Gate Keeper</h2>
-                  <p className="text-slate-400 text-sm mt-1">Configure parameters and sign in directly into your Admin environment.</p>
+                  <h2 className={`text-2xl font-bold tracking-tight font-sans transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>SSO Gate Keeper</h2>
+                  <p className={`text-sm mt-1 transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Configure parameters and sign in directly into your Admin environment.</p>
                 </div>
 
                 {authStep === "idle" && (
                   <div className="space-y-5 relative">
                     {/* SSO Parameters */}
-                    <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-xl space-y-3">
-                      <h3 className="text-xs font-semibold text-slate-300 tracking-wide uppercase font-mono">Auth0 Configurations</h3>
+                    <div className={`border p-4 rounded-xl space-y-3 transition-colors ${theme === 'dark' ? 'bg-slate-900/60 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
+                      <h3 className={`text-xs font-semibold tracking-wide uppercase font-mono transition-colors ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>Auth0 Configurations</h3>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[10px] text-slate-500 uppercase font-mono">Domain</label>
+                          <label className={`text-[10px] uppercase font-mono transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Domain</label>
                           <input
                             type="text"
                             value={auth0Domain}
                             onChange={(e) => setAuth0Domain(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-2.5 py-1.5 focus:border-violet-600 font-mono"
+                            className={`w-full text-xs rounded-lg px-2.5 py-1.5 focus:border-amber-600 font-mono transition-colors ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-300' : 'bg-white border-slate-300 text-slate-700'}`}
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] text-slate-500 uppercase font-mono">Client ID</label>
+                          <label className={`text-[10px] uppercase font-mono transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Client ID</label>
                           <input
                             type="text"
                             value={auth0ClientId}
                             onChange={(e) => setAuth0ClientId(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-2.5 py-1.5 focus:border-violet-600 font-mono"
+                            className={`w-full text-xs rounded-lg px-2.5 py-1.5 focus:border-amber-600 font-mono transition-colors ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-300' : 'bg-white border-slate-300 text-slate-700'}`}
                           />
                         </div>
                       </div>
@@ -1287,55 +1339,43 @@ export default function Dashboard() {
 
                     {/* Email Input */}
                     <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1.5">Direct Administration Email</label>
+                      <label className={`text-xs font-semibold block mb-1.5 transition-colors ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Direct Administration Email</label>
                       <div className="relative">
                         <input
                           type="email"
                           placeholder="administrator@domain.com"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-violet-500 text-sm rounded-xl px-4 py-3 pl-11 text-white placeholder-slate-500 transition duration-200 font-mono"
+                          className={`w-full text-sm rounded-xl px-4 py-3 pl-11 transition-colors font-mono focus:ring-2 focus:ring-amber-500/20 ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-white placeholder-slate-500 focus:border-amber-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-amber-400'}`}
                         />
-                        <Mail className="absolute left-4 top-3.5 h-4 w-4 text-slate-500" />
+                        <Mail className={`absolute left-4 top-3.5 h-4 w-4 transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`} />
                       </div>
                     </div>
 
                     <div className="flex flex-col space-y-3 pt-2">
                       <button
                         onClick={() => initiateAuth0SSO(email)}
-                        className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-medium rounded-xl py-3 transition shadow-lg shadow-violet-950/50 flex items-center justify-center space-x-2 text-sm"
+                        className={`w-full text-white font-bold rounded-xl py-3.5 transition flex items-center justify-center space-x-2 text-xs uppercase tracking-widest ${theme === 'dark' ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 shadow-lg shadow-amber-900/40' : 'bg-amber-600 hover:bg-amber-500 shadow-md shadow-amber-600/20'}`}
                       >
                         <ShieldCheck className="h-4.5 w-4.5" />
                         <span>Authenticate Administration Key</span>
                       </button>
 
                       <div className="relative flex py-2 items-center">
-                        <div className="flex-grow border-t border-slate-800/80"></div>
-                        <span className="flex-shrink mx-4 text-slate-600 text-xs font-mono">OR</span>
-                        <div className="flex-grow border-t border-slate-800/80"></div>
+                        <div className={`flex-grow border-t transition-colors ${theme === 'dark' ? 'border-slate-800/80' : 'border-slate-200'}`}></div>
+                        <span className={`flex-shrink mx-4 text-xs font-mono transition-colors ${theme === 'dark' ? 'text-slate-600' : 'text-slate-400'}`}>OR</span>
+                        <div className={`flex-grow border-t transition-colors ${theme === 'dark' ? 'border-slate-800/80' : 'border-slate-200'}`}></div>
                       </div>
 
                       <button
                         onClick={handleGmailSSO}
-                        className="w-full bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-medium rounded-xl py-3 transition flex items-center justify-center space-x-2 text-sm"
+                        className={`w-full font-bold rounded-xl py-3.5 transition flex items-center justify-center space-x-2 text-xs uppercase tracking-widest border ${theme === 'dark' ? 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300 hover:text-white' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900 shadow-sm'}`}
                       >
                         <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24">
-                          <path
-                            fill="#EA4335"
-                            d="M24 12.27c0-.86-.08-1.7-.22-2.5H12v4.75h6.73c-.29 1.5-1.14 2.78-2.4 3.63v3.01h3.87C22.47 19.33 24 16.1 24 12.27z"
-                          />
-                          <path
-                            fill="#34A853"
-                            d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.01c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.33v3.11C3.31 20.3 7.37 24 12 24z"
-                          />
-                          <path
-                            fill="#FBBC05"
-                            d="M5.27 14.28A7.2 7.2 0 0 1 5 12c0-.8.14-1.58.38-2.33V6.56H1.33A11.97 11.97 0 0 0 0 12c0 2.02.5 3.92 1.39 5.61l3.88-3.33z"
-                          />
-                          <path
-                            fill="#4285F4"
-                            d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.31 3.7 1.33 7.64l3.94 3.06c.95-2.85 3.6-4.95 6.73-4.95z"
-                          />
+                          <path fill="#EA4335" d="M24 12.27c0-.86-.08-1.7-.22-2.5H12v4.75h6.73c-.29 1.5-1.14 2.78-2.4 3.63v3.01h3.87C22.47 19.33 24 16.1 24 12.27z" />
+                          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.01c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.33v3.11C3.31 20.3 7.37 24 12 24z" />
+                          <path fill="#FBBC05" d="M5.27 14.28A7.2 7.2 0 0 1 5 12c0-.8.14-1.58.38-2.33V6.56H1.33A11.97 11.97 0 0 0 0 12c0 2.02.5 3.92 1.39 5.61l3.88-3.33z" />
+                          <path fill="#4285F4" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.31 3.7 1.33 7.64l3.94 3.06c.95-2.85 3.6-4.95 6.73-4.95z" />
                         </svg>
                         <span>Direct Sign In with Gmail (SSO)</span>
                       </button>
@@ -1462,32 +1502,76 @@ export default function Dashboard() {
             /* SECURE DASHBOARD INTERNAL VIEW */
             <div className="lg:col-span-12 flex flex-col space-y-6 w-full">
               
+              {/* TOP HEADER / STATUS BAR */}
+              <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 border p-4 rounded-2xl transition-colors duration-500 ${theme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+                <div className="flex items-center space-x-4">
+                  <div className={`h-10 w-10 border rounded-xl flex items-center justify-center transition-colors ${theme === 'dark' ? 'bg-amber-600/10 border-amber-600/30' : 'bg-amber-100 border-amber-200'}`}>
+                    <ShieldCheck className={`h-6 w-6 ${theme === 'dark' ? 'text-amber-500' : 'text-amber-600'}`} />
+                  </div>
+                  <div>
+                    <h1 className={`font-bold font-mono text-sm tracking-widest uppercase transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Workspace Management Portal</h1>
+                    <div className={`flex items-center space-x-2 text-[10px] font-mono transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>
+                      <span className="flex items-center">
+                        <div className="w-1 h-1 bg-emerald-500 rounded-full mr-1.5 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                        ENCRYPTED SESSION
+                      </span>
+                      <span>&bull;</span>
+                      <span>{auth0Domain}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`flex items-center space-x-3 p-2 rounded-xl border transition-colors ${theme === 'dark' ? 'bg-slate-950/50 border-slate-800/50' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
+                  <div className="flex items-center space-x-3 px-2">
+                    <div className="relative">
+                      <img 
+                        src={user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`} 
+                        alt="Avatar" 
+                        className={`h-8 w-8 rounded-lg border transition-colors ${theme === 'dark' ? 'border-slate-700' : 'border-slate-300 shadow-sm'}`}
+                      />
+                      <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 bg-emerald-500 border-2 rounded-full transition-colors shadow-sm" style={{ borderColor: theme === 'dark' ? '#020617' : '#f8fafc' }}></div>
+                    </div>
+                    <div className="hidden sm:block">
+                      <p className={`text-[10px] font-bold font-mono truncate max-w-[120px] uppercase transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{user?.displayName || "Admin"}</p>
+                      <p className={`text-[9px] font-mono truncate max-w-[120px] transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>{user?.email}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className={`p-2 rounded-lg transition-all border border-transparent ${theme === 'dark' ? 'text-slate-500 hover:text-red-400 hover:bg-red-400/10 hover:border-red-500/20' : 'text-slate-400 hover:text-red-600 hover:bg-red-50 hover:border-red-200'}`}
+                    title="Terminate Session"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
               {/* NAVIGATION TABS */}
-              <div className="flex items-center space-x-2 bg-slate-900/50 border border-slate-800 p-1.5 rounded-2xl w-fit">
+              <div className={`flex items-center space-x-2 border p-1.5 rounded-2xl w-fit transition-colors duration-500 ${theme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                 <button
                   onClick={() => setActiveTab("telemetry")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "telemetry" ? "bg-violet-600 text-white shadow-lg shadow-violet-900/20" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "telemetry" ? (theme === 'dark' ? "bg-amber-600 text-white shadow-lg shadow-amber-900/20" : "bg-amber-600 text-white shadow-md shadow-amber-600/20") : (theme === 'dark' ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}`}
                 >
                   <Activity className="w-4 h-4" />
                   <span>Telemetry</span>
                 </button>
                 <button
                   onClick={() => setActiveTab("management")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "management" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/20" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "management" ? (theme === 'dark' ? "bg-amber-600 text-white shadow-lg shadow-amber-900/20" : "bg-amber-600 text-white shadow-md shadow-amber-600/20") : (theme === 'dark' ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}`}
                 >
                   <LayoutGrid className="w-4 h-4" />
                   <span>Management</span>
                 </button>
                 <button
                   onClick={() => setActiveTab("security")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "security" ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "security" ? (theme === 'dark' ? "bg-amber-600 text-white shadow-lg shadow-amber-900/20" : "bg-amber-600 text-white shadow-md shadow-amber-600/20") : (theme === 'dark' ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}`}
                 >
                   <ShieldCheck className="w-4 h-4" />
                   <span>Security & Audit</span>
                 </button>
                 <button
                   onClick={() => setActiveTab("ai")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "ai" ? "bg-amber-600 text-white shadow-lg shadow-amber-900/20" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "ai" ? (theme === 'dark' ? "bg-amber-600 text-white shadow-lg shadow-amber-900/20" : "bg-amber-600 text-white shadow-md shadow-amber-600/20") : (theme === 'dark' ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}`}
                 >
                   <Sparkles className="w-4 h-4" />
                   <span>Gemini Insights</span>
@@ -1501,86 +1585,86 @@ export default function Dashboard() {
               <div className="lg:col-span-4 flex flex-col space-y-6">
                 
                 {/* ACTIVE SECURITY USER PROFILE CARD */}
-                <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-5 shadow-md relative overflow-hidden">
+                <div className={`border rounded-2xl p-5 shadow-md relative overflow-hidden transition-colors duration-500 ${theme === 'dark' ? 'bg-[#090d16] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                   <div className="absolute top-0 right-0 p-3">
-                    <User className="h-5 w-5 text-violet-500/30" />
+                    <User className={`h-5 w-5 transition-colors ${theme === 'dark' ? 'text-slate-500/30' : 'text-slate-300'}`} />
                   </div>
                   
-                  <h3 className="text-xs font-bold text-slate-400 tracking-wide uppercase font-mono mb-4">Secured Operator Session</h3>
+                  <h3 className={`text-[10px] font-bold tracking-widest uppercase font-mono mb-4 transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Secured Operator Session</h3>
                   
                   <div className="flex items-center space-x-3.5">
                     <div className="relative">
                       <img
                         src={userProfile?.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=administrator`}
                         alt="User profile"
-                        className="h-12 w-12 rounded-xl bg-slate-900 border border-slate-700 p-0.5"
+                        className={`h-12 w-12 rounded-xl border p-0.5 transition-colors ${theme === 'dark' ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}
                       />
-                      <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 bg-emerald-500 border-2 border-[#090d16] rounded-full"></span>
+                      <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 bg-emerald-500 border-2 rounded-full transition-colors" style={{ borderColor: theme === 'dark' ? '#090d16' : '#ffffff' }}></span>
                     </div>
                     <div>
-                      <h4 className="text-sm font-semibold text-white">{userProfile?.name || "Workspace Admin"}</h4>
-                      <p className="text-xs text-slate-400 font-mono truncate">{userProfile?.email || email}</p>
+                      <h4 className={`text-sm font-bold transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{userProfile?.name || "Workspace Admin"}</h4>
+                      <p className={`text-xs font-mono truncate transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{userProfile?.email || email}</p>
                     </div>
                   </div>
 
                   {/* Token Claims & Verification details */}
-                  <div className="mt-5 pt-4 border-t border-slate-800/80 space-y-2.5">
-                    <div className="flex justify-between items-center text-xs font-mono">
-                      <span className="text-slate-500">SSO Sign-In:</span>
-                      <span className="text-emerald-400 font-semibold px-2 py-0.5 bg-emerald-950/20 border border-emerald-900/40 rounded-full">OIDC Gmail</span>
+                  <div className={`mt-5 pt-4 border-t space-y-2.5 transition-colors ${theme === 'dark' ? 'border-slate-800/80' : 'border-slate-100'}`}>
+                    <div className="flex justify-between items-center text-[10px] font-mono">
+                      <span className={`${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>SSO Sign-In:</span>
+                      <span className={`font-bold px-2 py-0.5 border rounded-full transition-colors ${theme === 'dark' ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/40' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>OIDC Gmail</span>
                     </div>
-                    <div className="flex justify-between items-center text-xs font-mono">
-                      <span className="text-slate-500">OIDC Sub Claim:</span>
-                      <span className="text-slate-400 truncate max-w-[160px]">{userProfile?.sub || "auth0|956275618639"}</span>
+                    <div className="flex justify-between items-center text-[10px] font-mono">
+                      <span className={`${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>OIDC Sub Claim:</span>
+                      <span className={`truncate max-w-[160px] transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{userProfile?.sub || "auth0|956275618639"}</span>
                     </div>
-                    <div className="flex justify-between items-center text-xs font-mono">
-                      <span className="text-slate-500">Encryption:</span>
-                      <span className="text-violet-400">RS256 Header</span>
+                    <div className="flex justify-between items-center text-[10px] font-mono">
+                      <span className={`${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Encryption:</span>
+                      <span className={`transition-colors ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`}>RS256 Header</span>
                     </div>
-                    <div className="bg-slate-950/80 border border-slate-850 p-2.5 rounded-lg">
-                      <label className="text-[10px] text-slate-500 uppercase font-mono block mb-1">Decoded Active OIDC Token</label>
-                      <span className="text-[11px] font-mono text-slate-400 break-all select-all leading-normal">
-                        {tokenDetails}
+                    <div className={`border p-2.5 rounded-lg transition-colors ${theme === 'dark' ? 'bg-slate-950/80 border-slate-850' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
+                      <label className={`text-[9px] uppercase font-mono block mb-1 transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Decoded Active OIDC Token</label>
+                      <span className={`text-[10px] font-mono break-all select-all leading-normal transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {tokenDetails || "NO_ACTIVE_TOKEN_PAYLOAD"}
                       </span>
                     </div>
                   </div>
                 </div>
 
                 {/* AERO-BOT AI WORKSPACE AUTOMATOR */}
-                <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-5 shadow-md flex-1 flex flex-col relative overflow-hidden">
+                <div className={`border rounded-2xl p-5 shadow-md flex-1 flex flex-col relative overflow-hidden transition-colors duration-500 ${theme === 'dark' ? 'bg-[#090d16] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                   <div className="absolute top-0 right-0 p-4">
                     <span className="flex h-2.5 w-2.5 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500"></span>
+                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${theme === 'dark' ? 'bg-amber-400' : 'bg-amber-500'}`}></span>
+                      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${theme === 'dark' ? 'bg-amber-500' : 'bg-amber-600'}`}></span>
                     </span>
                   </div>
 
-                  <h3 className="text-xs font-bold text-slate-400 tracking-wide uppercase font-mono mb-4 flex items-center space-x-1.5">
-                    <Cpu className="h-4.5 w-4.5 text-violet-400" />
+                  <h3 className={`text-[10px] font-bold tracking-widest uppercase font-mono mb-4 flex items-center space-x-1.5 transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>
+                    <Cpu className={`h-4 w-4 ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`} />
                     <span>Aero-Bot Workspace Automator</span>
                   </h3>
 
                   {/* Bot Interactive Avatar & Response Panel */}
-                  <div className="bg-slate-950/80 border border-slate-850 p-4 rounded-xl space-y-3.5 mb-5 relative">
+                  <div className={`border p-4 rounded-xl space-y-3.5 mb-5 relative transition-colors ${theme === 'dark' ? 'bg-slate-950/80 border-slate-850 shadow-inner' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-tr from-violet-600 to-indigo-500 rounded-lg flex items-center justify-center text-white font-bold relative">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold relative transition-colors ${theme === 'dark' ? 'bg-gradient-to-tr from-amber-600 to-orange-500' : 'bg-amber-600'}`}>
                         <span>🤖</span>
                         {botStatus === "Executing Task..." && (
-                          <span className="absolute inset-0 bg-violet-500 rounded-lg blur animate-pulse opacity-75"></span>
+                          <span className="absolute inset-0 bg-amber-500 rounded-lg blur animate-pulse opacity-75"></span>
                         )}
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold font-mono text-white">Aero-Bot Workspace AI</h4>
+                        <h4 className={`text-xs font-bold font-mono transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Aero-Bot Workspace AI</h4>
                         <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-ping"></span>
-                          <span className="text-[10px] text-slate-400 font-mono">{botStatus}</span>
+                          <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-ping shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+                          <span className={`text-[10px] font-mono transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{botStatus}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-xs font-mono text-slate-300 leading-relaxed border-t border-slate-850 pt-3 max-h-[160px] overflow-y-auto">
+                    <div className={`text-[11px] font-mono leading-relaxed border-t pt-3 max-h-[160px] overflow-y-auto transition-colors ${theme === 'dark' ? 'text-slate-300 border-slate-850' : 'text-slate-600 border-slate-200'}`}>
                       {botStatus === "Executing Task..." ? (
-                        <div className="flex items-center space-x-1.5 text-violet-400">
+                        <div className={`flex items-center space-x-1.5 ${theme === 'dark' ? 'text-amber-400' : 'text-amber-600'}`}>
                           <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                           <span>Thinking & coordinating with workspace servers...</span>
                         </div>
@@ -1592,61 +1676,81 @@ export default function Dashboard() {
 
                   {/* Preset Bot Action Controls */}
                   <div className="space-y-2.5 mb-5">
-                    <h4 className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-wider">Quick Bot Actions</h4>
+                    <h4 className={`text-[10px] font-bold uppercase font-mono tracking-widest transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Quick Bot Actions</h4>
                     
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => runBotAction("Align DB Shards")}
                         disabled={botStatus !== "Idle"}
-                        className="p-2.5 bg-slate-900 border border-slate-800 hover:border-violet-800 text-slate-300 hover:text-white rounded-lg text-[11px] font-mono text-left transition duration-150 flex items-center justify-between"
+                        className={`p-2.5 border rounded-lg text-[11px] font-mono text-left transition duration-150 flex items-center justify-between group ${
+                          theme === 'dark' 
+                            ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-amber-800 hover:text-white' 
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-amber-400 hover:text-slate-900 shadow-sm'
+                        }`}
                       >
                         <span>Align DB Shards</span>
-                        <Server className="h-3.5 w-3.5 text-slate-500" />
+                        <Server className={`h-3.5 w-3.5 transition-colors ${theme === 'dark' ? 'text-slate-500 group-hover:text-amber-500' : 'text-slate-400 group-hover:text-amber-600'}`} />
                       </button>
 
                       <button
                         onClick={() => runBotAction("Renew Auth0 Handshake")}
                         disabled={botStatus !== "Idle"}
-                        className="p-2.5 bg-slate-900 border border-slate-800 hover:border-violet-800 text-slate-300 hover:text-white rounded-lg text-[11px] font-mono text-left transition duration-150 flex items-center justify-between"
+                        className={`p-2.5 border rounded-lg text-[11px] font-mono text-left transition duration-150 flex items-center justify-between group ${
+                          theme === 'dark' 
+                            ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-amber-800 hover:text-white' 
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-amber-400 hover:text-slate-900 shadow-sm'
+                        }`}
                       >
                         <span>Renew Auth0 Keys</span>
-                        <Key className="h-3.5 w-3.5 text-slate-500" />
+                        <Key className={`h-3.5 w-3.5 transition-colors ${theme === 'dark' ? 'text-slate-500 group-hover:text-amber-500' : 'text-slate-400 group-hover:text-amber-600'}`} />
                       </button>
 
                       <button
                         onClick={() => runBotAction("Network Checkup")}
                         disabled={botStatus !== "Idle"}
-                        className="p-2.5 bg-slate-900 border border-slate-800 hover:border-violet-800 text-slate-300 hover:text-white rounded-lg text-[11px] font-mono text-left transition duration-150 flex items-center justify-between"
+                        className={`p-2.5 border rounded-lg text-[11px] font-mono text-left transition duration-150 flex items-center justify-between group ${
+                          theme === 'dark' 
+                            ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-amber-800 hover:text-white' 
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-amber-400 hover:text-slate-900 shadow-sm'
+                        }`}
                       >
                         <span>Network Audit</span>
-                        <Activity className="h-3.5 w-3.5 text-slate-500" />
+                        <Activity className={`h-3.5 w-3.5 transition-colors ${theme === 'dark' ? 'text-slate-500 group-hover:text-amber-500' : 'text-slate-400 group-hover:text-amber-600'}`} />
                       </button>
 
                       <button
                         onClick={() => runBotAction("Flush Logs Cache")}
                         disabled={botStatus !== "Idle"}
-                        className="p-2.5 bg-slate-900 border border-slate-800 hover:border-violet-800 text-slate-300 hover:text-white rounded-lg text-[11px] font-mono text-left transition duration-150 flex items-center justify-between"
+                        className={`p-2.5 border rounded-lg text-[11px] font-mono text-left transition duration-150 flex items-center justify-between group ${
+                          theme === 'dark' 
+                            ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-amber-800 hover:text-white' 
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-amber-400 hover:text-slate-900 shadow-sm'
+                        }`}
                       >
                         <span>Flush Logs Cache</span>
-                        <Clock className="h-3.5 w-3.5 text-slate-500" />
+                        <Clock className={`h-3.5 w-3.5 transition-colors ${theme === 'dark' ? 'text-slate-500 group-hover:text-amber-500' : 'text-slate-400 group-hover:text-amber-600'}`} />
                       </button>
                     </div>
                   </div>
 
                   {/* Custom Prompt Input */}
-                  <form onSubmit={submitCustomBotPrompt} className="relative mt-auto pt-4 border-t border-slate-800/80">
+                  <form onSubmit={submitCustomBotPrompt} className={`relative mt-auto pt-4 border-t transition-colors ${theme === 'dark' ? 'border-slate-800/80' : 'border-slate-100'}`}>
                     <input
                       type="text"
                       placeholder="Instruct Aero-Bot..."
                       value={customPrompt}
                       disabled={botStatus !== "Idle"}
                       onChange={(e) => setCustomPrompt(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-3 py-2.5 pr-10 text-white placeholder-slate-500 focus:border-violet-500 font-mono"
+                      className={`w-full text-[11px] rounded-lg px-3 py-2.5 pr-10 transition-colors font-mono focus:ring-2 focus:ring-amber-500/20 ${
+                        theme === 'dark' 
+                          ? 'bg-slate-900 border-slate-800 text-white placeholder-slate-600 focus:border-amber-600' 
+                          : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-amber-400 shadow-inner'
+                      }`}
                     />
                     <button
                       type="submit"
                       disabled={botStatus !== "Idle" || !customPrompt.trim()}
-                      className="absolute right-2.5 bottom-2 p-1 text-violet-400 hover:text-violet-300 disabled:text-slate-600"
+                      className={`absolute right-2.5 bottom-2 p-1 transition-colors ${theme === 'dark' ? 'text-amber-400 hover:text-amber-300 disabled:text-slate-700' : 'text-amber-600 hover:text-amber-700 disabled:text-slate-300'}`}
                     >
                       <Send className="h-4 w-4" />
                     </button>
@@ -1658,14 +1762,14 @@ export default function Dashboard() {
               <div className="lg:col-span-8 flex flex-col space-y-6">
                 
                 {/* COMPREHENSIVE SECURITY DIAGNOSTICS */}
-                <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-5 shadow-md grid grid-cols-1 md:grid-cols-12 gap-5 relative overflow-hidden">
+                <div className={`border rounded-2xl p-5 shadow-md grid grid-cols-1 md:grid-cols-12 gap-5 relative overflow-hidden transition-colors duration-500 ${theme === 'dark' ? 'bg-[#090d16] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                   <div className="absolute top-0 right-0 p-4">
-                    <Settings className="h-5 w-5 text-slate-500/20" />
+                    <Settings className={`h-5 w-5 transition-colors ${theme === 'dark' ? 'text-slate-500/20' : 'text-slate-200'}`} />
                   </div>
 
                   {/* Radial Dial / Score */}
-                  <div className="md:col-span-4 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-800/80 pb-5 md:pb-0 md:pr-5">
-                    <h3 className="text-xs font-bold text-slate-400 tracking-wide uppercase font-mono mb-4 text-center">Security Rating</h3>
+                  <div className={`md:col-span-4 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r pb-5 md:pb-0 md:pr-5 transition-colors ${theme === 'dark' ? 'border-slate-800/80' : 'border-slate-100'}`}>
+                    <h3 className={`text-[10px] font-bold tracking-widest uppercase font-mono mb-4 text-center transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Security Rating</h3>
                     
                     <div className="relative w-32 h-32 flex items-center justify-center">
                       <svg className="w-full h-full transform -rotate-90">
@@ -1676,7 +1780,7 @@ export default function Dashboard() {
                           stroke="currentColor"
                           strokeWidth="8"
                           fill="transparent"
-                          className="text-slate-850"
+                          className={theme === 'dark' ? 'text-slate-850' : 'text-slate-100'}
                         />
                         <circle
                           cx="64"
@@ -1687,20 +1791,24 @@ export default function Dashboard() {
                           fill="transparent"
                           strokeDasharray={2 * Math.PI * 52}
                           strokeDashoffset={2 * Math.PI * 52 * (1 - securityScore / 100)}
-                          className="text-emerald-500 transition-all duration-1000"
+                          className="text-emerald-500 transition-all duration-1000 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
                         />
                       </svg>
                       
                       <div className="absolute flex flex-col items-center justify-center">
-                        <span className="text-3xl font-extrabold tracking-tight text-white font-mono">{securityScore}%</span>
-                        <span className="text-[9px] text-slate-400 font-mono uppercase tracking-wider">Zero Trust</span>
+                        <span className={`text-3xl font-extrabold tracking-tighter font-mono transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{securityScore}%</span>
+                        <span className={`text-[9px] font-bold font-mono uppercase tracking-widest transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Zero Trust</span>
                       </div>
                     </div>
 
                     <button
                       onClick={executeSecurityAudit}
                       disabled={isAuditing}
-                      className="mt-4 px-4 py-2 rounded-lg bg-violet-600/10 hover:bg-violet-600/20 border border-violet-800/50 hover:border-violet-700 text-violet-400 text-xs font-mono font-medium transition duration-200"
+                      className={`mt-4 px-4 py-2 rounded-lg font-bold text-[10px] uppercase tracking-widest border transition-all ${
+                        theme === 'dark' 
+                          ? 'bg-amber-600/10 hover:bg-amber-600/20 border-amber-800/50 text-amber-400 shadow-lg shadow-amber-900/20' 
+                          : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-700 shadow-sm'
+                      } ${isAuditing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {isAuditing ? "Auditing Network..." : "Trigger Live Security Audit"}
                     </button>
@@ -1708,82 +1816,82 @@ export default function Dashboard() {
 
                   {/* Metrics details */}
                   <div className="md:col-span-8 flex flex-col justify-between">
-                    <h3 className="text-xs font-bold text-slate-400 tracking-wide uppercase font-mono mb-4">Diagnostics Health Console</h3>
+                    <h3 className={`text-[10px] font-bold tracking-widest uppercase font-mono mb-4 transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Diagnostics Health Console</h3>
                     
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between border-b border-slate-850 pb-2">
-                        <span className="text-xs text-slate-500 font-mono">SSL Certificate status</span>
-                        <span className="text-xs text-white font-semibold font-mono">{diagnostics.sslCertificate}</span>
+                      <div className={`flex items-center justify-between border-b pb-2 transition-colors ${theme === 'dark' ? 'border-slate-850' : 'border-slate-100'}`}>
+                        <span className={`text-[11px] font-mono transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>SSL Certificate status</span>
+                        <span className={`text-[11px] font-bold font-mono transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{diagnostics.sslCertificate}</span>
                       </div>
-                      <div className="flex items-center justify-between border-b border-slate-850 pb-2">
-                        <span className="text-xs text-slate-500 font-mono">Active JWT Key-Signing</span>
-                        <span className="text-xs text-white font-semibold font-mono">{diagnostics.jwtSignatureType}</span>
+                      <div className={`flex items-center justify-between border-b pb-2 transition-colors ${theme === 'dark' ? 'border-slate-850' : 'border-slate-100'}`}>
+                        <span className={`text-[11px] font-mono transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Active JWT Key-Signing</span>
+                        <span className={`text-[11px] font-bold font-mono transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{diagnostics.jwtSignatureType}</span>
                       </div>
-                      <div className="flex items-center justify-between border-b border-slate-850 pb-2">
-                        <span className="text-xs text-slate-500 font-mono">Cross-Origin CORS Policy</span>
-                        <span className="text-xs text-white font-semibold font-mono">{diagnostics.corsPolicy}</span>
+                      <div className={`flex items-center justify-between border-b pb-2 transition-colors ${theme === 'dark' ? 'border-slate-850' : 'border-slate-100'}`}>
+                        <span className={`text-[11px] font-mono transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Cross-Origin CORS Policy</span>
+                        <span className={`text-[11px] font-bold font-mono transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{diagnostics.corsPolicy}</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-500 font-mono">Database Rules Execution</span>
-                        <span className="text-xs text-white font-semibold font-mono">{diagnostics.dbAccessControl}</span>
+                      <div className={`flex items-center justify-between border-b transition-colors ${theme === 'dark' ? 'border-slate-850' : 'border-slate-100'}`}>
+                        <span className={`text-[11px] font-mono transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Database Rules Execution</span>
+                        <span className={`text-[11px] font-bold font-mono transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{diagnostics.dbAccessControl}</span>
                       </div>
                     </div>
 
                     {auditBrief && (
-                      <div className="mt-4 p-3 bg-slate-950 border border-slate-850 rounded-xl">
-                        <label className="text-[10px] text-slate-500 uppercase font-mono font-bold block mb-1">Audit Brief</label>
-                        <p className="text-[11px] text-slate-300 leading-relaxed font-mono">{auditBrief}</p>
+                      <div className={`mt-4 p-3 border rounded-xl transition-colors ${theme === 'dark' ? 'bg-slate-950 border-slate-850' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
+                        <label className={`text-[9px] font-bold uppercase font-mono block mb-1 transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Audit Brief</label>
+                        <p className={`text-[11px] leading-relaxed font-mono transition-colors ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>{auditBrief}</p>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* REAL-TIME BIOMETRIC METRICS CONSOLE */}
-                <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-6 shadow-md relative overflow-hidden flex flex-col space-y-5">
+                <div className={`border rounded-2xl p-6 shadow-md relative overflow-hidden flex flex-col space-y-5 transition-colors duration-500 ${theme === 'dark' ? 'bg-[#090d16] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                   <div className="absolute top-0 right-0 p-4">
-                    <TrendingUp className="h-5 w-5 text-slate-500/20" />
+                    <TrendingUp className={`h-5 w-5 transition-colors ${theme === 'dark' ? 'text-slate-500/20' : 'text-slate-200'}`} />
                   </div>
 
                   {/* Header */}
-                  <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-850 pb-4 gap-4">
+                  <div className={`flex flex-col md:flex-row md:items-center justify-between border-b pb-4 gap-4 transition-colors ${theme === 'dark' ? 'border-slate-850' : 'border-slate-100'}`}>
                     <div>
-                      <h3 className="text-sm font-bold text-white tracking-tight flex items-center space-x-2">
-                        <Heart className="h-5 w-5 text-rose-500 animate-pulse" />
+                      <h3 className={`text-sm font-bold tracking-tight flex items-center space-x-2 transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                        <Heart className="h-5 w-5 text-rose-500 animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.3)]" />
                         <span>Biometric Health Desk</span>
-                        <span className="text-[10px] text-emerald-400 font-mono px-2 py-0.5 bg-emerald-950/30 rounded-full border border-emerald-900/40">Live Sync</span>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border transition-colors ${theme === 'dark' ? 'text-emerald-400 bg-emerald-950/30 border-emerald-900/40' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>Live Sync</span>
                       </h3>
-                      <p className="text-xs text-slate-400 mt-0.5">Real-time health telemetry synced directly via Firebase Firestore database</p>
+                      <p className={`text-xs mt-0.5 transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Real-time health telemetry synced directly via Firebase Firestore database</p>
                     </div>
 
                     {/* Chart selector & Export controls */}
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center space-x-1.5 bg-slate-950 p-1 rounded-xl border border-slate-850">
+                      <div className={`flex items-center space-x-1.5 p-1 rounded-xl border transition-colors ${theme === 'dark' ? 'bg-slate-950 border-slate-850' : 'bg-slate-100 border-slate-200'}`}>
                         <button
                           onClick={() => setBiometricChartType("combined")}
-                          className={`px-2.5 py-1 text-[11px] font-mono font-medium rounded-lg transition cursor-pointer ${biometricChartType === "combined" ? "bg-violet-600 text-white" : "text-slate-400 hover:text-slate-200"}`}
+                          className={`px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-tight rounded-lg transition cursor-pointer ${biometricChartType === "combined" ? "bg-amber-600 text-white shadow-md shadow-amber-900/20" : (theme === 'dark' ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-900")}`}
                         >
                           Timeline
                         </button>
                         <button
                           onClick={() => setBiometricChartType("heartRate")}
-                          className={`px-2.5 py-1 text-[11px] font-mono font-medium rounded-lg transition cursor-pointer ${biometricChartType === "heartRate" ? "bg-rose-600 text-white" : "text-slate-400 hover:text-slate-200"}`}
+                          className={`px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-tight rounded-lg transition cursor-pointer ${biometricChartType === "heartRate" ? "bg-rose-600 text-white shadow-md shadow-rose-900/20" : (theme === 'dark' ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-900")}`}
                         >
                           Heart Rate
                         </button>
                         <button
                           onClick={() => setBiometricChartType("activity")}
-                          className={`px-2.5 py-1 text-[11px] font-mono font-medium rounded-lg transition cursor-pointer ${biometricChartType === "activity" ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-slate-200"}`}
+                          className={`px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-tight rounded-lg transition cursor-pointer ${biometricChartType === "activity" ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/20" : (theme === 'dark' ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-900")}`}
                         >
                           Activity
                         </button>
                       </div>
 
-                      <div className="flex items-center space-x-1.5 bg-slate-950 p-1 rounded-xl border border-slate-850">
+                      <div className={`flex items-center space-x-1.5 p-1 rounded-xl border transition-colors ${theme === 'dark' ? 'bg-slate-950 border-slate-850' : 'bg-slate-100 border-slate-200'}`}>
                         <button
                           onClick={handleExportCSV}
                           disabled={biometricData.length === 0}
                           title="Export current metrics as CSV"
-                          className="px-2.5 py-1 text-[11px] font-mono font-medium rounded-lg text-slate-400 hover:text-slate-100 disabled:opacity-40 disabled:hover:text-slate-400 transition flex items-center space-x-1 cursor-pointer"
+                          className={`px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-tight rounded-lg transition flex items-center space-x-1 cursor-pointer ${theme === 'dark' ? 'text-slate-400 hover:text-slate-100' : 'text-slate-500 hover:text-slate-900'} disabled:opacity-40 disabled:hover:text-slate-400`}
                         >
                           <Download className="h-3 w-3" />
                           <span>Export CSV</span>
@@ -1791,11 +1899,11 @@ export default function Dashboard() {
                         <button
                           onClick={() => setIsCodeModalOpen(true)}
                           disabled={biometricData.length === 0}
-                          title="View raw data in Code editor"
-                          className="px-2.5 py-1 text-[11px] font-mono font-medium rounded-lg text-slate-400 hover:text-slate-100 disabled:opacity-40 disabled:hover:text-slate-400 transition flex items-center space-x-1 cursor-pointer"
+                          title="View raw biometric payload"
+                          className={`px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-tight rounded-lg transition flex items-center space-x-1 cursor-pointer ${theme === 'dark' ? 'text-slate-400 hover:text-slate-100' : 'text-slate-500 hover:text-slate-900'} disabled:opacity-40 disabled:hover:text-slate-400`}
                         >
                           <Code className="h-3 w-3" />
-                          <span>View Code</span>
+                          <span>Raw Data</span>
                         </button>
                       </div>
                     </div>
@@ -1813,9 +1921,15 @@ export default function Dashboard() {
                             <Heart className={`h-4 w-4 ${isSimulatingBiometrics ? "animate-pulse" : ""}`} />
                           </div>
                           <span className="text-[10px] uppercase font-mono text-slate-500">Pulse</span>
-                          <span className="text-base font-bold text-white font-mono mt-0.5">
-                            <AnimatedNumber value={biometricData.length > 0 ? biometricData[biometricData.length - 1].heartRate : 72} />
-                            <span className="text-[10px] text-rose-400 pl-0.5">BPM</span>
+                          <span className="text-base font-bold text-white font-mono mt-0.5 min-w-[60px] flex items-center justify-center">
+                            {!isBiometricsLoaded ? (
+                              <Skeleton className="h-5 w-12" />
+                            ) : (
+                              <>
+                                <AnimatedNumber value={biometricData.length > 0 ? biometricData[biometricData.length - 1].heartRate : 72} />
+                                <span className="text-[10px] text-rose-400 pl-0.5">BPM</span>
+                              </>
+                            )}
                           </span>
                         </div>
 
@@ -1825,8 +1939,12 @@ export default function Dashboard() {
                             <Footprints className="h-4 w-4" />
                           </div>
                           <span className="text-[10px] uppercase font-mono text-slate-500">Steps</span>
-                          <span className="text-base font-bold text-white font-mono mt-0.5">
-                            <AnimatedNumber value={biometricData.length > 0 ? biometricData[biometricData.length - 1].steps : 0} />
+                          <span className="text-base font-bold text-white font-mono mt-0.5 min-w-[40px] flex items-center justify-center">
+                            {!isBiometricsLoaded ? (
+                              <Skeleton className="h-5 w-10" />
+                            ) : (
+                              <AnimatedNumber value={biometricData.length > 0 ? biometricData[biometricData.length - 1].steps : 0} />
+                            )}
                           </span>
                         </div>
 
@@ -1836,9 +1954,15 @@ export default function Dashboard() {
                             <Flame className="h-4 w-4" />
                           </div>
                           <span className="text-[10px] uppercase font-mono text-slate-500">Burned</span>
-                          <span className="text-base font-bold text-white font-mono mt-0.5">
-                            <AnimatedNumber value={biometricData.length > 0 ? biometricData[biometricData.length - 1].calories : 0} />
-                            <span className="text-[10px] text-amber-400 pl-0.5 font-sans">kcal</span>
+                          <span className="text-base font-bold text-white font-mono mt-0.5 min-w-[60px] flex items-center justify-center">
+                            {!isBiometricsLoaded ? (
+                              <Skeleton className="h-5 w-12" />
+                            ) : (
+                              <>
+                                <AnimatedNumber value={biometricData.length > 0 ? biometricData[biometricData.length - 1].calories : 0} />
+                                <span className="text-[10px] text-amber-400 pl-0.5 font-sans">kcal</span>
+                              </>
+                            )}
                           </span>
                         </div>
                       </div>
@@ -2042,9 +2166,21 @@ export default function Dashboard() {
 
                     {/* Recharts Visualization Panel */}
                     <div className="xl:col-span-8 flex flex-col justify-center min-h-[300px]">
-                      {!isMounted ? (
-                        <div className="h-[280px] w-full bg-slate-950/40 border border-slate-850/60 rounded-xl flex items-center justify-center text-slate-500">
-                          <RefreshCw className="h-6 w-6 animate-spin text-slate-600" />
+                      {!isMounted || !isBiometricsLoaded ? (
+                        <div className="h-[280px] w-full bg-slate-950/40 border border-slate-850/60 rounded-xl p-6 flex flex-col justify-between">
+                          <div className="flex items-end justify-between h-full space-x-2">
+                            {[40, 70, 45, 90, 65, 30, 50, 85, 40, 60, 35, 75].map((height, i) => (
+                              <div key={i} className="flex-1 flex flex-col justify-end h-full">
+                                <Skeleton className="w-full" style={{ height: `${height}%` }} />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex justify-between mt-4">
+                            <Skeleton className="h-2 w-12" />
+                            <Skeleton className="h-2 w-12" />
+                            <Skeleton className="h-2 w-12" />
+                            <Skeleton className="h-2 w-12" />
+                          </div>
                         </div>
                       ) : biometricData.length === 0 ? (
                         <div className="h-[280px] w-full bg-slate-950/40 border border-slate-850/60 rounded-xl flex flex-col items-center justify-center text-slate-500 text-center p-6 space-y-3.5">
@@ -2081,7 +2217,7 @@ export default function Dashboard() {
                     <span>Real-time Workspace Terminal Logs (Firestore)</span>
                   </h3>
 
-                  <LogViewer logs={logs} />
+                  <LogViewer logs={logs} isLoading={!isLogsLoaded} theme={theme} />
 
                   {/* Detailed inspector modal overlay */}
                   <AnimatePresence>

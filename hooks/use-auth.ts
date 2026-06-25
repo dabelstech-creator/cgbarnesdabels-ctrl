@@ -6,6 +6,7 @@ import {
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut,
+  signInAnonymously,
   User
 } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
@@ -27,17 +28,18 @@ export function useAuth() {
             console.log(`[Auth] Creating initial user profile for ${firebaseUser.uid}`);
             await setDoc(userRef, {
               uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName,
-              photoURL: firebaseUser.photoURL,
+              email: firebaseUser.email || 'anonymous@mock-workspace.com',
+              displayName: firebaseUser.displayName || 'Mock Administrator',
+              photoURL: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`,
               lastLogin: serverTimestamp(),
+              isMock: firebaseUser.isAnonymous
             });
           } else {
             console.log(`[Auth] Updating lastLogin for ${firebaseUser.uid}`);
             await setDoc(userRef, { 
               lastLogin: serverTimestamp(),
-              displayName: firebaseUser.displayName || userDoc.data()?.displayName || null,
-              photoURL: firebaseUser.photoURL || userDoc.data()?.photoURL || null,
+              displayName: firebaseUser.displayName || userDoc.data()?.displayName || 'Mock Administrator',
+              photoURL: firebaseUser.photoURL || userDoc.data()?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`,
             }, { merge: true });
           }
         } catch (err: any) {
@@ -68,6 +70,19 @@ export function useAuth() {
     }
   };
 
+  const loginWithMock = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await signInAnonymously(auth);
+    } catch (err: any) {
+      setError(err.message);
+      console.error("Mock login error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     setLoading(true);
     try {
@@ -79,5 +94,5 @@ export function useAuth() {
     }
   };
 
-  return { user, loading, error, loginWithGoogle, logout };
+  return { user, loading, error, loginWithGoogle, loginWithMock, logout };
 }
