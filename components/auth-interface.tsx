@@ -3,6 +3,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../hooks/use-auth';
+import { useMockAuth } from '../hooks/use-mock-auth';
 import { 
   Shield, 
   LogIn, 
@@ -15,7 +16,12 @@ import {
 } from 'lucide-react';
 
 export default function AuthInterface() {
-  const { user, loading, loginWithGoogle, logout } = useAuth();
+  const { user, loading: authLoading, loginWithGoogle, logout } = useAuth();
+  const { mockUser, loading: mockLoading, loginWithMockOAuth, logoutMockOAuth } = useMockAuth();
+  
+  const currentUser = user || mockUser;
+  const handleLogout = user ? logout : logoutMockOAuth;
+  const loading = authLoading || mockLoading;
 
   if (loading) {
     return (
@@ -67,6 +73,13 @@ export default function AuthInterface() {
                   />
                   <span>Authorize with Google</span>
                 </button>
+                <button
+                  onClick={loginWithMockOAuth}
+                  className="w-full flex items-center justify-center space-x-3 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all duration-200 border border-slate-700 active:scale-[0.98]"
+                >
+                  <Lock className="w-5 h-5" />
+                  <span>Mock Login (Development)</span>
+                </button>
               </div>
 
               <div className="pt-4 flex items-center justify-center space-x-4 text-[10px] uppercase tracking-widest text-slate-500 font-bold">
@@ -101,14 +114,14 @@ export default function AuthInterface() {
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-bold text-white truncate">
-                  {user.displayName || "Administrator"}
+                  {currentUser.displayName || "Administrator"}
                 </h3>
                 <p className="text-xs text-slate-400 truncate">
-                  {user.email}
+                  {currentUser.email}
                 </p>
               </div>
               <button 
-                onClick={logout}
+                onClick={handleLogout}
                 className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
                 title="Logout"
               >
@@ -132,7 +145,7 @@ export default function AuthInterface() {
                 <div className="w-1.5 h-1.5 bg-violet-500 rounded-full mr-2 animate-pulse"></div>
                 SESSION ACTIVE
               </span>
-              <span>UID: {user.uid.substring(0, 8)}...</span>
+              <span>UID: {currentUser.uid.substring(0, 8)}...</span>
             </div>
           </motion.div>
         )}

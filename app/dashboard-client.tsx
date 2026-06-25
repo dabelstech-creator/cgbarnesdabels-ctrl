@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { motion } from "motion/react";
 import { db, auth } from "../lib/firebase";
+import AuthInterface from "../components/auth-interface";
 import {
   collection,
   addDoc,
@@ -173,6 +175,8 @@ export default function Dashboard() {
   const [systemHealth, setSystemHealth] = useState<"Stable" | "Normal" | "Degraded">("Stable");
   const [healthLatency, setHealthLatency] = useState<number>(0);
   const [lastCheckTime, setLastCheckTime] = useState<string>("");
+  const [isPollingEnabled, setIsPollingEnabled] = useState(true);
+  const [pollingInterval, setPollingInterval] = useState(8000);
 
   // AI Bot States
   const [botStatus, setBotStatus] = useState<"Idle" | "Executing Task...">("Idle");
@@ -182,6 +186,7 @@ export default function Dashboard() {
   // Real-time Logs State
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [isLogsLoaded, setIsLogsLoaded] = useState(false);
 
   // Security Audit States
   const [securityScore, setSecurityScore] = useState<number>(98);
@@ -206,6 +211,7 @@ export default function Dashboard() {
   }
 
   const [biometricData, setBiometricData] = useState<BiometricEntry[]>([]);
+  const [isBiometricsLoaded, setIsBiometricsLoaded] = useState(false);
   const [isSimulatingBiometrics, setIsSimulatingBiometrics] = useState(false);
   const [biometricChartType, setBiometricChartType] = useState<"combined" | "heartRate" | "activity">("combined");
   
@@ -216,6 +222,34 @@ export default function Dashboard() {
   const [manualActivity, setManualActivity] = useState<string>("Walking");
 
   const [isMounted, setIsMounted] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const exportToCSV = () => {
+    setIsExporting(true);
+    const headers = ["Timestamp", "Type", "Details"];
+    const csvRows = [headers.join(",")];
+
+    logs.forEach(log => {
+      csvRows.push([log.timestamp ? log.timestamp.toISOString() : "", log.action, log.details].join(","));
+    });
+    
+    biometricData.forEach(bio => {
+      csvRows.push([bio.timestamp ? bio.timestamp.toISOString() : "", bio.type, bio.value.toString()].join(","));
+    });
+    
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.setAttribute("hidden", "");
+    a.setAttribute("href", url);
+    a.setAttribute("download", "health_report.csv");
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    setTimeout(() => setIsExporting(false), 2000);
+  };
 
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
@@ -598,11 +632,14 @@ export default function Dashboard() {
       }
     };
 
-    // Run first probe immediately, then every 8 seconds
+    // Run first probe immediately
     runProbe();
-    const interval = setInterval(runProbe, 8000);
+    
+    if (!isPollingEnabled) return () => {};
+    
+    const interval = setInterval(runProbe, pollingInterval);
     return () => clearInterval(interval);
-  }, []);
+  }, [isPollingEnabled, pollingInterval]);
 
   // Sync real-time logs from Firestore logs collection
   useEffect(() => {
@@ -624,6 +661,7 @@ export default function Dashboard() {
         });
       });
       setLogs(logsArray);
+      setIsLogsLoaded(true);
     }, (error) => {
       console.error("Error fetching logs in real-time:", error);
     });
@@ -680,6 +718,7 @@ export default function Dashboard() {
       const limited = sorted.slice(-25);
       
       setBiometricData(limited);
+      setIsBiometricsLoaded(true);
     }, (error) => {
       console.error("Failed to sync biometric collection in real-time:", error);
     });
@@ -1017,7 +1056,7 @@ export default function Dashboard() {
     }
   };
 
-  if (!isMounted) {
+  if (!isMounted || !isLogsLoaded || !isBiometricsLoaded) {
     return (
       <div className="min-h-screen bg-[#030712] text-slate-100 flex flex-col items-center justify-center font-sans">
         <div className="flex flex-col items-center space-y-4">
@@ -1030,8 +1069,12 @@ export default function Dashboard() {
               </svg>
             </div>
           </div>
-          <h2 className="text-xl font-semibold tracking-tight text-white">Loading Workspace Portal...</h2>
-          <p className="text-xs text-slate-400 font-mono">Initializing secure orchestration core</p>
+          <h2 className="text-xl font-semibold tracking-tight text-white">
+            {!isMounted ? "Loading Workspace Portal..." : "Syncing Initial Data..."}
+          </h2>
+          <p className="text-xs text-slate-400 font-mono">
+            {!isMounted ? "Initializing secure orchestration core" : "Fetching real-time metrics and auth logs"}
+          </p>
         </div>
       </div>
     );
@@ -1054,6 +1097,9 @@ export default function Dashboard() {
               <span className="text-xs text-violet-400 font-mono px-2 py-0.5 bg-violet-950/40 rounded-full border border-violet-900">v3.5</span>
             </h1>
             <p className="text-xs text-slate-400">Auth0 Enterprise Automation Platform</p>
+            <p className="text-[10px] text-slate-500 font-mono mt-1">
+              Sync: {logs.length + biometricData.length} items | Last: {biometricData.length > 0 ? biometricData[biometricData.length - 1].timestamp.toLocaleTimeString() : "N/A"}
+            </p>
           </div>
         </div>
 
@@ -1065,6 +1111,23 @@ export default function Dashboard() {
               <span className="text-xs text-slate-300 font-medium font-mono">Firestore Link:</span>
             </div>
             <div className="flex items-center space-x-1.5">
+              <button 
+                onClick={() => setIsPollingEnabled(!isPollingEnabled)}
+                className={`p-1 rounded ${isPollingEnabled ? "bg-emerald-900/50 text-emerald-400" : "bg-slate-800 text-slate-500"}`}
+                title="Toggle polling"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+              <select
+                value={pollingInterval}
+                onChange={(e) => setPollingInterval(Number(e.target.value))}
+                className="bg-slate-800 text-slate-300 text-[10px] rounded px-1 py-0.5 border border-slate-700"
+              >
+                <option value={2000}>2s</option>
+                <option value={5000}>5s</option>
+                <option value={8000}>8s</option>
+                <option value={15000}>15s</option>
+              </select>
               <span className={`h-2 w-2 rounded-full ${systemHealth === "Stable" ? "bg-emerald-500" : systemHealth === "Normal" ? "bg-cyan-500" : "bg-amber-500"}`}></span>
               <span className={`text-xs font-semibold ${systemHealth === "Stable" ? "text-emerald-400" : systemHealth === "Normal" ? "text-cyan-400" : "text-amber-500"}`}>
                 {systemHealth}
@@ -1076,13 +1139,34 @@ export default function Dashboard() {
           </div>
 
           {isAuthenticated && (
-            <button
-              onClick={logout}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-red-950/20 hover:bg-red-950/40 border border-red-900/50 hover:border-red-800 text-red-400 text-xs transition duration-200"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              <span>Disconnect</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={exportToCSV}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-emerald-900/50 text-xs transition duration-200 ${isExporting ? "bg-emerald-950/40 text-emerald-300 border-emerald-800" : "bg-emerald-950/20 hover:bg-emerald-950/40 hover:border-emerald-800 text-emerald-400"}`}
+              >
+                <motion.div
+                  initial={false}
+                  animate={isExporting ? { scale: [1, 1.2, 1] } : {}}
+                >
+                  {isExporting ? <Mail className="h-3.5 w-3.5 animate-bounce" /> : <Download className="h-3.5 w-3.5" />}
+                </motion.div>
+                <span>{isExporting ? "Sending..." : "Export"}</span>
+              </button>
+              <button
+                onClick={() => setIsAuthModalOpen(true)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs transition duration-200"
+              >
+                <User className="h-3.5 w-3.5" />
+                <span>Account</span>
+              </button>
+              <button
+                onClick={logout}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-red-950/20 hover:bg-red-950/40 border border-red-900/50 hover:border-red-800 text-red-400 text-xs transition duration-200"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Disconnect</span>
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -2475,6 +2559,32 @@ export default function Dashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsAuthModalOpen(false)}
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+          />
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="relative bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl z-10 p-1"
+          >
+            <AuthInterface />
+            <button
+              onClick={() => setIsAuthModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-800 p-1 rounded-full"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </motion.div>
+        </div>
+      )}
 
       {/* FOOTER */}
       <footer className="border-t border-slate-900/80 bg-[#050910] text-center py-4 text-xs text-slate-600 font-mono mt-auto">
