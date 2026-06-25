@@ -161,6 +161,7 @@ function AnimatedNumber({ value }: { value: number }) {
 export default function Dashboard() {
   // Auth states
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [mockAuthenticated, setMockAuthenticated] = useState(false);
   const [authStep, setAuthStep] = useState<"idle" | "handshake" | "jwks" | "mfa" | "success">("idle");
   const [email, setEmail] = useState("");
   const [auth0Domain, setAuth0Domain] = useState("dev-workspace-portal.us.auth0.com");
@@ -1035,25 +1036,33 @@ export default function Dashboard() {
     }
   };
 
-  // Disconnect active workspace session
-  const logout = async () => {
-    setIsAuthenticated(false);
-    setAuthStep("idle");
-    setEmail("");
-    setMfaCode(["", "", "", "", "", ""]);
-    setUserProfile(null);
+  const logActivity = async (message: string, details: string, level: "success" | "info" | "warning" = "info") => {
+    const newLog: LogEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: "auth",
+      level,
+      message,
+      details,
+      timestamp: new Date(),
+    };
+    setLogs((prev) => [newLog, ...prev]);
     
-    try {
+    // Also push to firestore if db is available
+    if (db) {
       await addDoc(collection(db, "logs"), {
-        type: "auth",
-        level: "warning",
-        message: "Active Administrator Session disconnected.",
-        details: "Secure logoff handshake successfully completed. Deleted temporary JWT tokens.",
+        ...newLog,
         timestamp: serverTimestamp(),
       });
-    } catch (e) {
-      console.error(e);
     }
+  };
+
+  const toggleMockAuth = async () => {
+    setMockAuthenticated(!mockAuthenticated);
+    await logActivity(
+      !mockAuthenticated ? "Mock Authentication Success" : "Mock Authentication Revoked",
+      !mockAuthenticated ? "User logged in via simulated OAuth provider." : "Session invalidated by user.",
+      !mockAuthenticated ? "success" : "warning"
+    );
   };
 
   if (!isMounted || !isLogsLoaded || !isBiometricsLoaded) {
@@ -1105,6 +1114,17 @@ export default function Dashboard() {
 
         {/* Real-time Health Monitor */}
         <div className="flex items-center space-x-4">
+          <button
+            onClick={toggleMockAuth}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs transition duration-200 ${
+              mockAuthenticated
+                ? "bg-emerald-950/40 text-emerald-300 border-emerald-800"
+                : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+            }`}
+          >
+            <LogIn className="h-3.5 w-3.5" />
+            <span>{mockAuthenticated ? "Authenticated" : "Mock Login"}</span>
+          </button>
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 space-x-3">
             <div className="flex items-center space-x-2">
               <Activity className={`h-4 w-4 ${systemHealth === "Stable" ? "text-emerald-400 animate-pulse" : systemHealth === "Normal" ? "text-cyan-400" : "text-amber-500 animate-bounce"}`} />
