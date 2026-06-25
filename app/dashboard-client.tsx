@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 import { db, auth } from "../lib/firebase";
 import AuthInterface from "../components/auth-interface";
+import LogViewer from "../components/log-viewer";
 import {
   collection,
   addDoc,
@@ -56,7 +57,7 @@ import {
   LayoutGrid,
   LogIn,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+
 import dynamic from "next/dynamic";
 
 const WorkspaceCharts = dynamic(() => import("../components/WorkspaceCharts"), {
@@ -1065,7 +1066,7 @@ export default function Dashboard() {
     );
   };
 
-  if (!isMounted || !isLogsLoaded || !isBiometricsLoaded) {
+  if (!isMounted) {
     return (
       <div className="min-h-screen bg-[#030712] text-slate-100 flex flex-col items-center justify-center font-sans">
         <div className="flex flex-col items-center space-y-4">
@@ -2040,46 +2041,7 @@ export default function Dashboard() {
                     <span>Real-time Workspace Terminal Logs (Firestore)</span>
                   </h3>
 
-                  {/* Logs stream console */}
-                  <div className="flex-1 bg-slate-950/80 border border-slate-850 rounded-xl p-4 font-mono text-xs overflow-y-auto max-h-[280px] space-y-2.5">
-                    {logs.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center py-12 text-slate-500 space-y-2">
-                        <Activity className="h-6 w-6 animate-pulse" />
-                        <span>Awaiting system operations. No logs persisted yet.</span>
-                      </div>
-                    ) : (
-                      logs.map((log) => {
-                        const isSuccess = log.level === "success";
-                        const isWarning = log.level === "warning";
-                        const isError = log.level === "error";
-                        const colorClass = isSuccess 
-                          ? "text-emerald-400" 
-                          : isWarning 
-                            ? "text-amber-400" 
-                            : isError 
-                              ? "text-red-400" 
-                              : "text-cyan-400";
-                        
-                        return (
-                          <div
-                            key={log.id}
-                            onClick={() => setSelectedLog(log)}
-                            className="p-2 rounded hover:bg-slate-900/60 transition cursor-pointer border border-transparent hover:border-slate-800 flex items-start space-x-2.5"
-                          >
-                            <span className="text-[10px] text-slate-500 flex-shrink-0 pt-0.5">
-                              {log.timestamp instanceof Date ? log.timestamp.toLocaleTimeString() : ""}
-                            </span>
-                            <span className={`font-semibold uppercase text-[10px] px-1.5 py-0.5 rounded bg-slate-900 ${colorClass}`}>
-                              {log.type}
-                            </span>
-                            <span className="text-slate-300 break-words flex-1 leading-normal">
-                              {log.message}
-                            </span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
+                  <LogViewer logs={logs} />
 
                   {/* Detailed inspector modal overlay */}
                   <AnimatePresence>
