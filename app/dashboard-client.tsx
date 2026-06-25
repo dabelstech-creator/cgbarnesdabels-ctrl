@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { db, auth } from "../lib/firebase";
+import firebaseConfig from "../firebase-applet-config.json";
 import AuthInterface from "../components/auth-interface";
 import LogViewer from "../components/log-viewer";
 import {
@@ -56,6 +57,9 @@ import {
   Users,
   LayoutGrid,
   LogIn,
+  Camera,
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
 
 import dynamic from "next/dynamic";
@@ -266,17 +270,43 @@ export default function Dashboard() {
   const [geminiInput, setGeminiInput] = useState("");
   const [geminiOutput, setGeminiOutput] = useState("");
   const [isGeminiLoading, setIsGeminiLoading] = useState(false);
+  const [isSearchEnabled, setIsSearchEnabled] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<{ data: string; mimeType: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage({
+          data: (reader.result as string).split(",")[1],
+          mimeType: file.type,
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeSelectedImage = () => {
+    setSelectedImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const handleGeminiSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!geminiInput.trim()) return;
+    if (!geminiInput.trim() && !selectedImage) return;
     setIsGeminiLoading(true);
     setGeminiOutput("");
     try {
       const response = await fetch("/api/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: geminiInput }),
+        body: JSON.stringify({ 
+          prompt: geminiInput || "Analyze this image.", 
+          useSearch: isSearchEnabled,
+          image: selectedImage 
+        }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error);
@@ -589,7 +619,7 @@ export default function Dashboard() {
   // Real-time connection and latency probe with Firestore
   useEffect(() => {
     const runProbe = async () => {
-      if (!db) {
+      if (!db || !isAuthenticated) {
         setSystemHealth("Degraded");
         return;
       }
@@ -627,8 +657,11 @@ export default function Dashboard() {
         } else {
           setSystemHealth("Degraded");
         }
-      } catch (err) {
-        console.error("Firestore health probe failed:", err);
+      } catch (err: any) {
+        // Only log if it's not a permission error while still authenticated (likely race condition)
+        if (err.code !== 'permission-denied' || isAuthenticated) {
+          console.error("Firestore health probe failed:", err);
+        }
         setSystemHealth("Degraded");
         setHealthLatency(-1);
       }
@@ -641,11 +674,14 @@ export default function Dashboard() {
     
     const interval = setInterval(runProbe, pollingInterval);
     return () => clearInterval(interval);
-  }, [isPollingEnabled, pollingInterval]);
+  }, [isPollingEnabled, pollingInterval, isAuthenticated]);
 
   // Sync real-time logs from Firestore logs collection
   useEffect(() => {
-    if (!db) return;
+    if (!db || !isAuthenticated) {
+      setIsLogsLoaded(false);
+      return;
+    }
 
     const q = query(collection(db, "logs"), orderBy("timestamp", "desc"), limit(20));
     
@@ -666,10 +702,14 @@ export default function Dashboard() {
       setIsLogsLoaded(true);
     }, (error) => {
       console.error("Error fetching logs in real-time:", error);
+      // Don't set error state if it's just a permission issue during auth transition
+      if (error.code !== 'permission-denied') {
+        setIsLogsLoaded(true); // Still "loaded" even if empty/errored to stop spinner
+      }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isAuthenticated]);
 
   // Track mounting state to avoid Recharts SSR hydration warnings
   useEffect(() => {
@@ -2393,13 +2433,60 @@ export default function Dashboard() {
                                   <textarea
                                     value={geminiInput}
                                     onChange={(e) => setGeminiInput(e.target.value)}
-                                    placeholder="Ask Gemini to analyze system health or security protocols..."
+                                    placeholder={selectedImage ? "What would you like to know about this image?" : "Ask Gemini to analyze system health or security protocols..."}
                                     className="w-full bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all min-h-[120px] resize-none"
                                   />
+                                  
+                                  {selectedImage && (
+                                    <div className="absolute top-4 right-4 group">
+                                      <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-700 shadow-xl bg-slate-900">
+                                        <img 
+                                          src={`data:${selectedImage.mimeType};base64,${selectedImage.data}`} 
+                                          alt="Preview" 
+                                          className="w-full h-full object-cover"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={removeSelectedImage}
+                                          className="absolute top-1 right-1 p-1 bg-red-600 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className="absolute bottom-3 left-3 flex items-center space-x-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => fileInputRef.current?.click()}
+                                      className={`p-2 rounded-lg transition-all ${selectedImage ? 'bg-amber-600/20 text-amber-500 border border-amber-500/30' : 'bg-slate-800 text-slate-400 hover:text-white border border-transparent'}`}
+                                      title="Upload image for analysis"
+                                    >
+                                      <Camera className="h-4 w-4" />
+                                    </button>
+                                    <input
+                                      type="file"
+                                      ref={fileInputRef}
+                                      onChange={handleImageUpload}
+                                      accept="image/*"
+                                      className="hidden"
+                                    />
+                                    
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsSearchEnabled(!isSearchEnabled)}
+                                      className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border transition-all ${isSearchEnabled ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-slate-800 text-slate-400 border-transparent hover:text-white'}`}
+                                    >
+                                      <Globe className="h-3.5 w-3.5" />
+                                      <span className="text-[10px] font-bold uppercase tracking-wider">{isSearchEnabled ? 'Search On' : 'Search Off'}</span>
+                                    </button>
+                                  </div>
+
                                   <div className="absolute bottom-3 right-3 flex items-center space-x-2">
                                     <button
                                       type="submit"
-                                      disabled={isGeminiLoading || !geminiInput.trim()}
+                                      disabled={isGeminiLoading || (!geminiInput.trim() && !selectedImage)}
                                       className="flex items-center space-x-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-all shadow-lg shadow-amber-900/20"
                                     >
                                       {isGeminiLoading ? (

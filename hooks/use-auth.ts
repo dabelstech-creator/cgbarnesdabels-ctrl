@@ -24,6 +24,7 @@ export function useAuth() {
         try {
           const userDoc = await getDoc(userRef);
           if (!userDoc.exists()) {
+            console.log(`[Auth] Creating initial user profile for ${firebaseUser.uid}`);
             await setDoc(userRef, {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
@@ -32,10 +33,16 @@ export function useAuth() {
               lastLogin: serverTimestamp(),
             });
           } else {
-            await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+            console.log(`[Auth] Updating lastLogin for ${firebaseUser.uid}`);
+            await setDoc(userRef, { 
+              lastLogin: serverTimestamp(),
+              displayName: firebaseUser.displayName || userDoc.data()?.displayName || null,
+              photoURL: firebaseUser.photoURL || userDoc.data()?.photoURL || null,
+            }, { merge: true });
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error("Error syncing user data:", err);
+          console.error("Error code:", err.code);
         }
         setUser(firebaseUser);
       } else {

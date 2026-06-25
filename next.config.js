@@ -9,7 +9,6 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   transpilePackages: ['lucide-react', 'framer-motion', 'motion'],
-  distDir: 'dist',
 };
 
 module.exports = nextConfig;

@@ -12,12 +12,46 @@
         "lastLogin": { "type": "string", "format": "date-time", "description": "The timestamp of the user's last login." }
       },
       "required": ["uid", "email"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "System and operation logs.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "level": { "type": "string" },
+        "message": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "message", "timestamp"]
+    },
+    "Biometric": {
+      "title": "Biometric",
+      "description": "Biometric data entry.",
+      "type": "object",
+      "properties": {
+        "heartRate": { "type": "number" },
+        "steps": { "type": "number" },
+        "calories": { "type": "number" },
+        "activity": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["timestamp"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "The collection of user profile documents."
+    },
+    "/logs/{logId}": {
+      "schema": "Log",
+      "description": "The collection of logs."
+    },
+    "/biometrics/{bioId}": {
+      "schema": "Biometric",
+      "description": "The collection of biometric data."
     }
   }
 }

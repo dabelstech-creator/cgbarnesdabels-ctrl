@@ -12,15 +12,38 @@ const ai = new GoogleGenAI({
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt } = await req.json();
+    const { prompt, useSearch, image } = await req.json();
 
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json({ error: "Gemini API key is not configured." }, { status: 500 });
     }
 
+    const contents: any[] = [];
+    
+    if (image && image.data && image.mimeType) {
+      contents.push({
+        parts: [
+          {
+            inlineData: {
+              data: image.data,
+              mimeType: image.mimeType,
+            },
+          },
+          { text: prompt },
+        ],
+      });
+    } else {
+      contents.push({
+        parts: [{ text: prompt }]
+      });
+    }
+
+    const tools = useSearch ? [{ googleSearch: {} }] : undefined;
+
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
-      contents: prompt,
+      contents,
+      tools,
       config: {
         thinkingConfig: {
           thinkingLevel: ThinkingLevel.HIGH
