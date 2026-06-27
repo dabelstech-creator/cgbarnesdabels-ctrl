@@ -3,6 +3,7 @@
 import nextDynamic from "next/dynamic";
 import { useAuth } from "../hooks/use-auth";
 import AuthInterface from "../components/auth-interface";
+import { MockAuthProvider } from "../components/mock-auth-provider";
 
 const DashboardClient = nextDynamic(() => import("./dashboard-client"), {
   ssr: false,
@@ -56,5 +57,9 @@ export default function DashboardWrapper() {
     );
   }
 
-  return <DashboardClient />;
+  return (
+    <MockAuthProvider>
+      <DashboardClient />
+    </MockAuthProvider>
+  );
 }

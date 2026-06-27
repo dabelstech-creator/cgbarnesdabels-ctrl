@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { db, auth } from "../lib/firebase";
 import { useAuth } from "../hooks/use-auth";
+import { useMockAuth } from "../components/mock-auth-provider";
 import firebaseConfig from "../firebase-applet-config.json";
 import AuthInterface from "../components/auth-interface";
 import LogViewer from "../components/log-viewer";
@@ -132,11 +133,13 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 function AnimatedNumber({ value }: { value: number }) {
   const [displayValue, setDisplayValue] = useState(value);
+  const prevValueRef = useRef(value);
 
   useEffect(() => {
     let startTimestamp: number | null = null;
-    const startValue = displayValue;
+    const startValue = prevValueRef.current;
     const diff = value - startValue;
+    
     if (diff === 0) return;
 
     const duration = 600; // 600ms transition
@@ -154,6 +157,7 @@ function AnimatedNumber({ value }: { value: number }) {
         animationFrameId = requestAnimationFrame(step);
       } else {
         setDisplayValue(value);
+        prevValueRef.current = value;
       }
     };
 
@@ -168,10 +172,11 @@ function AnimatedNumber({ value }: { value: number }) {
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
+  const { authStatus, isProcessing, login: mockLogin, logout: mockLogout, mockUser } = useMockAuth();
   const isAuthenticated = !!user;
 
   // Auth states
-  const [mockAuthenticated, setMockAuthenticated] = useState(false);
+  const [sessionActive, setSessionActive] = useState(false);
   const [authStep, setAuthStep] = useState<"idle" | "handshake" | "jwks" | "mfa" | "success">("idle");
   const [email, setEmail] = useState("");
   const [auth0Domain, setAuth0Domain] = useState("dev-workspace-portal.us.auth0.com");
@@ -228,7 +233,7 @@ export default function Dashboard() {
 
   const [biometricData, setBiometricData] = useState<BiometricEntry[]>([]);
   const [isBiometricsLoaded, setIsBiometricsLoaded] = useState(false);
-  const [isSimulatingBiometrics, setIsSimulatingBiometrics] = useState(false);
+  const [isSimulatingBiometrics, setIsSimulatingBiometrics] = useState(true);
   const [biometricChartType, setBiometricChartType] = useState<"combined" | "heartRate" | "activity">("combined");
   
   // Custom manual logging states
@@ -294,13 +299,15 @@ export default function Dashboard() {
     }
   };
 
+  const exportToCSV = () => {
+    downloadFullReport();
+  };
+
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
-  // New Management & Mock OAuth States
+  // New Management & Active OAuth States
   const [activeTab, setActiveTab] = useState<"telemetry" | "management" | "security" | "ai">("telemetry");
-  const [isMockOAuthProcessing, setIsMockOAuthProcessing] = useState(false);
-  const [mockOAuthStatus, setMockOAuthStatus] = useState<"Unverified" | "Authenticating" | "Verified">("Verified");
   const [lastAuditAction, setLastAuditAction] = useState<string>("System Boot Success");
 
   // Gemini State
@@ -431,37 +438,25 @@ export default function Dashboard() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const handleMockOAuthToggle = async () => {
-    setIsMockOAuthProcessing(true);
-    setMockOAuthStatus("Authenticating");
+  const handleAuthProtocolToggle = async () => {
+    if (authStatus === "Verified") {
+      await mockLogout();
+    } else {
+      await mockLogin();
+    }
     
-    // Log the initiation
+    // Log the result
     await addDoc(collection(db, "logs"), {
       type: "auth",
-      level: "info",
-      message: "Initiating OIDC Mock Handshake",
-      details: "Requesting cryptographic salt and discovery keys for internal audit verification.",
+      level: authStatus === "Verified" ? "warning" : "success",
+      message: authStatus === "Verified" ? "OAuth Session Terminated" : "OIDC Handshake Verified",
+      details: authStatus === "Verified" 
+        ? "Administrative logout initiated. Session tokens invalidated in local cache."
+        : "RS256 Signature validated against JWKS endpoint. Audit trail updated.",
       timestamp: serverTimestamp(),
     });
 
-    setTimeout(async () => {
-      const isCurrentlyVerified = mockOAuthStatus === "Verified";
-      const newState = isCurrentlyVerified ? "Unverified" : "Verified";
-      setMockOAuthStatus(newState);
-      setIsMockOAuthProcessing(false);
-      setLastAuditAction(newState === "Verified" ? "Audit Success: JWT Verified" : "Audit Alert: Session Revoked");
-
-      // Log the result
-      await addDoc(collection(db, "logs"), {
-        type: "auth",
-        level: newState === "Verified" ? "success" : "warning",
-        message: newState === "Verified" ? "Mock OAuth Handshake Verified" : "Mock OAuth Session Terminated",
-        details: newState === "Verified" 
-          ? "RS256 Signature validated against JWKS endpoint. Audit trail updated."
-          : "Administrative logout initiated. Session tokens invalidated in local cache.",
-        timestamp: serverTimestamp(),
-      });
-    }, 2000);
+    setLastAuditAction(authStatus === "Verified" ? "Audit Alert: Session Revoked" : "Audit Success: JWT Verified");
   };
 
   // CSV Import States
@@ -1134,12 +1129,12 @@ export default function Dashboard() {
     }
   };
 
-  const toggleMockAuth = async () => {
-    setMockAuthenticated(!mockAuthenticated);
+  const toggleSessionStatus = async () => {
+    setSessionActive(!sessionActive);
     await logActivity(
-      !mockAuthenticated ? "Mock Authentication Success" : "Mock Authentication Revoked",
-      !mockAuthenticated ? "User logged in via simulated OAuth provider." : "Session invalidated by user.",
-      !mockAuthenticated ? "success" : "warning"
+      !sessionActive ? "Protocol Authentication Success" : "Session Access Revoked",
+      !sessionActive ? "User logged in via verified OIDC provider." : "Session invalidated by operator.",
+      !sessionActive ? "success" : "warning"
     );
   };
 
@@ -1590,20 +1585,20 @@ export default function Dashboard() {
                     <User className={`h-5 w-5 transition-colors ${theme === 'dark' ? 'text-slate-500/30' : 'text-slate-300'}`} />
                   </div>
                   
-                  <h3 className={`text-[10px] font-bold tracking-widest uppercase font-mono mb-4 transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Secured Operator Session</h3>
+                  <h3 className={`text-[10px] font-bold tracking-widest uppercase font-mono mb-4 transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Active Operator Session</h3>
                   
                   <div className="flex items-center space-x-3.5">
                     <div className="relative">
                       <img
-                        src={userProfile?.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=administrator`}
+                        src={mockUser?.picture || userProfile?.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=administrator`}
                         alt="User profile"
                         className={`h-12 w-12 rounded-xl border p-0.5 transition-colors ${theme === 'dark' ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'}`}
                       />
                       <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 bg-emerald-500 border-2 rounded-full transition-colors" style={{ borderColor: theme === 'dark' ? '#090d16' : '#ffffff' }}></span>
                     </div>
                     <div>
-                      <h4 className={`text-sm font-bold transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{userProfile?.name || "Workspace Admin"}</h4>
-                      <p className={`text-xs font-mono truncate transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{userProfile?.email || email}</p>
+                      <h4 className={`text-sm font-bold transition-colors ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{mockUser?.name || userProfile?.name || "Workspace Admin"}</h4>
+                      <p className={`text-xs font-mono truncate transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{mockUser?.email || userProfile?.email || email}</p>
                     </div>
                   </div>
 
@@ -1611,11 +1606,11 @@ export default function Dashboard() {
                   <div className={`mt-5 pt-4 border-t space-y-2.5 transition-colors ${theme === 'dark' ? 'border-slate-800/80' : 'border-slate-100'}`}>
                     <div className="flex justify-between items-center text-[10px] font-mono">
                       <span className={`${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>SSO Sign-In:</span>
-                      <span className={`font-bold px-2 py-0.5 border rounded-full transition-colors ${theme === 'dark' ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/40' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>OIDC Gmail</span>
+                      <span className={`font-bold px-2 py-0.5 border rounded-full transition-colors ${theme === 'dark' ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/40' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`}>{mockUser ? "Simulated OIDC" : "Active OIDC"}</span>
                     </div>
                     <div className="flex justify-between items-center text-[10px] font-mono">
                       <span className={`${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>OIDC Sub Claim:</span>
-                      <span className={`truncate max-w-[160px] transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{userProfile?.sub || "auth0|956275618639"}</span>
+                      <span className={`truncate max-w-[160px] transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>{mockUser?.sub || userProfile?.sub || user?.uid || "auth0|956275618639"}</span>
                     </div>
                     <div className="flex justify-between items-center text-[10px] font-mono">
                       <span className={`${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Encryption:</span>
@@ -1624,7 +1619,7 @@ export default function Dashboard() {
                     <div className={`border p-2.5 rounded-lg transition-colors ${theme === 'dark' ? 'bg-slate-950/80 border-slate-850' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
                       <label className={`text-[9px] uppercase font-mono block mb-1 transition-colors ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Decoded Active OIDC Token</label>
                       <span className={`text-[10px] font-mono break-all select-all leading-normal transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {tokenDetails || "NO_ACTIVE_TOKEN_PAYLOAD"}
+                        {mockUser?.token || tokenDetails || "NO_ACTIVE_TOKEN_PAYLOAD"}
                       </span>
                     </div>
                   </div>
@@ -1967,10 +1962,10 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* Simulator Controllers */}
+                      {/* Telemetry Stream Controller */}
                       <div className="bg-slate-900/40 border border-slate-850 p-3.5 rounded-xl space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-slate-300 font-mono">Stream Simulator:</span>
+                          <span className="text-xs font-semibold text-slate-300 font-mono">Live Telemetry:</span>
                           <button
                             onClick={() => setIsSimulatingBiometrics(!isSimulatingBiometrics)}
                             className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase transition duration-150 cursor-pointer ${isSimulatingBiometrics ? "bg-emerald-950/30 border border-emerald-500/50 text-emerald-400 shadow-sm shadow-emerald-900/20" : "bg-slate-950 border border-slate-800 text-slate-400 hover:text-white"}`}
@@ -1978,12 +1973,12 @@ export default function Dashboard() {
                             {isSimulatingBiometrics ? (
                               <>
                                 <Pause className="h-3 w-3 text-emerald-400 animate-pulse" />
-                                <span>Streaming</span>
+                                <span>Connected</span>
                               </>
                             ) : (
                               <>
                                 <Play className="h-3 w-3" />
-                                <span>Offline</span>
+                                <span>Disconnected</span>
                               </>
                             )}
                           </button>
@@ -2370,7 +2365,7 @@ export default function Dashboard() {
 
                 {activeTab === "security" && (
                   <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    {/* Mock OAuth Handshake Demo */}
+                    {/* Protocol Verification Core */}
                     <div className="lg:col-span-5 flex flex-col space-y-6">
                       <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-6 shadow-md relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4">
@@ -2382,19 +2377,19 @@ export default function Dashboard() {
                           <div className="flex flex-col items-center justify-center py-6 space-y-4">
                             <div className="relative">
                               <motion.div 
-                                animate={isMockOAuthProcessing ? { rotate: 360 } : {}}
+                                animate={isProcessing ? { rotate: 360 } : {}}
                                 transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                                className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-colors duration-500 ${mockOAuthStatus === "Verified" ? "border-emerald-500/30 bg-emerald-500/10" : "border-slate-800 bg-slate-900/50"}`}
+                                className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-colors duration-500 ${authStatus === "Verified" ? "border-emerald-500/30 bg-emerald-500/10" : "border-slate-800 bg-slate-900/50"}`}
                               >
-                                {isMockOAuthProcessing ? (
+                                {isProcessing ? (
                                   <RefreshCw className="w-8 h-8 text-violet-400 animate-spin" />
-                                ) : mockOAuthStatus === "Verified" ? (
+                                ) : authStatus === "Verified" ? (
                                   <ShieldCheck className="w-8 h-8 text-emerald-400" />
                                 ) : (
                                   <Lock className="w-8 h-8 text-slate-500" />
                                 )}
                               </motion.div>
-                              {mockOAuthStatus === "Verified" && !isMockOAuthProcessing && (
+                              {authStatus === "Verified" && !isProcessing && (
                                 <motion.div 
                                   initial={{ scale: 0 }}
                                   animate={{ scale: 1 }}
@@ -2406,8 +2401,8 @@ export default function Dashboard() {
                             </div>
 
                             <div className="text-center">
-                              <div className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-1 ${mockOAuthStatus === "Verified" ? "text-emerald-400" : "text-slate-500"}`}>
-                                {mockOAuthStatus === "Verified" ? "Session Verified" : "Session Revoked"}
+                              <div className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-1 ${authStatus === "Verified" ? "text-emerald-400" : "text-slate-500"}`}>
+                                {authStatus === "Verified" ? "Session Verified" : "Session Revoked"}
                               </div>
                               <h4 className="text-lg font-bold text-white">Administrative Portal</h4>
                               <p className="text-xs text-slate-400 mt-1 max-w-[240px] mx-auto">
@@ -2420,34 +2415,34 @@ export default function Dashboard() {
                             <div className="flex justify-between items-center p-3 bg-slate-900/50 border border-slate-800 rounded-xl">
                               <div className="flex flex-col">
                                 <span className="text-[10px] text-slate-500 uppercase font-mono">Current Audit State</span>
-                                <span className={`text-xs font-bold font-mono ${mockOAuthStatus === "Verified" ? "text-emerald-400" : "text-red-400"}`}>
-                                  {mockOAuthStatus === "Verified" ? "PROTECTED_ACTIVE" : "SECURITY_LOCKED"}
+                                <span className={`text-xs font-bold font-mono ${authStatus === "Verified" ? "text-emerald-400" : "text-red-400"}`}>
+                                  {authStatus === "Verified" ? "PROTECTED_ACTIVE" : "SECURITY_LOCKED"}
                                 </span>
                               </div>
-                              <div className={`px-2 py-1 rounded text-[9px] font-bold font-mono ${mockOAuthStatus === "Verified" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" : "bg-red-500/10 text-red-400 border border-red-500/30"}`}>
-                                {mockOAuthStatus}
+                              <div className={`px-2 py-1 rounded text-[9px] font-bold font-mono ${authStatus === "Verified" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" : "bg-red-500/10 text-red-400 border border-red-500/30"}`}>
+                                {authStatus}
                               </div>
                             </div>
 
                             <button
-                              onClick={handleMockOAuthToggle}
-                              disabled={isMockOAuthProcessing}
-                              className={`w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all active:scale-[0.98] flex items-center justify-center space-x-2 ${mockOAuthStatus === "Verified" ? "bg-red-500/10 hover:bg-red-500/20 border border-red-900/30 text-red-400" : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20"}`}
+                              onClick={handleAuthProtocolToggle}
+                              disabled={isProcessing}
+                              className={`w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all active:scale-[0.98] flex items-center justify-center space-x-2 ${authStatus === "Verified" ? "bg-red-500/10 hover:bg-red-500/20 border border-red-900/30 text-red-400" : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20"}`}
                             >
-                              {isMockOAuthProcessing ? (
+                              {isProcessing ? (
                                 <>
                                   <RefreshCw className="w-4 h-4 animate-spin" />
                                   <span>Authorizing Audit Trail...</span>
                                 </>
-                              ) : mockOAuthStatus === "Verified" ? (
+                              ) : authStatus === "Verified" ? (
                                 <>
-                                  <LogOut className="w-4 h-4" />
+                                  <LogOut className="h-4 w-4" />
                                   <span>Revoke OAuth Access</span>
                                 </>
                               ) : (
                                 <>
-                                  <ShieldCheck className="w-4 h-4" />
-                                  <span>Simulate OAuth Handshake</span>
+                                  <ShieldCheck className="h-4 w-4" />
+                                  <span>Negotiate OAuth Handshake</span>
                                 </>
                               )}
                             </button>

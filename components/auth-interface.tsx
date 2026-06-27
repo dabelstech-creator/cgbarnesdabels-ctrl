@@ -78,7 +78,7 @@ export default function AuthInterface() {
                 className="w-full flex items-center justify-center space-x-3 px-6 py-3 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 border border-slate-700 active:scale-[0.98] font-mono"
               >
                 <Lock className="w-4 h-4" />
-                <span>Mock OIDC Handshake</span>
+                <span>Admin Protocol Access</span>
               </button>
             </div>
 
