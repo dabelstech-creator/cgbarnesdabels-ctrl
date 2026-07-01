@@ -1,5 +1,3 @@
-const path = require('path');
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
@@ -8,7 +6,6 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  transpilePackages: ['lucide-react', 'framer-motion', 'motion'],
 };
 
-module.exports = nextConfig;
+export default nextConfig;

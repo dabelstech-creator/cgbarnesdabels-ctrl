@@ -9,7 +9,8 @@
         "email": { "type": "string", "description": "The user's email address." },
         "displayName": { "type": "string", "description": "The user's display name." },
         "photoURL": { "type": "string", "description": "The URL to the user's profile photo." },
-        "lastLogin": { "type": "string", "format": "date-time", "description": "The timestamp of the user's last login." }
+        "lastLogin": { "type": "string", "format": "date-time", "description": "The timestamp of the user's last login." },
+        "isMock": { "type": "boolean", "description": "Whether the user is a mock/anonymous user." }
       },
       "required": ["uid", "email"]
     },

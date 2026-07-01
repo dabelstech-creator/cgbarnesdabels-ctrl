@@ -8,6 +8,8 @@ import { useMockAuth } from "../components/mock-auth-provider";
 import firebaseConfig from "../firebase-applet-config.json";
 import AuthInterface from "../components/auth-interface";
 import LogViewer from "../components/log-viewer";
+import RepositoryIntelligence from "../components/RepositoryIntelligence";
+import StatusSummary from "../components/StatusSummary";
 import {
   collection,
   addDoc,
@@ -127,8 +129,9 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  const errorMsg = `Firestore Error: ${JSON.stringify(errInfo)}`;
+  console.error(errorMsg);
+  return errorMsg;
 }
 
 function AnimatedNumber({ value }: { value: number }) {
@@ -173,7 +176,7 @@ function AnimatedNumber({ value }: { value: number }) {
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const { authStatus, isProcessing, login: mockLogin, logout: mockLogout, mockUser } = useMockAuth();
-  const isAuthenticated = !!user;
+  const isAuthenticated = !!user || authStatus === 'Verified';
 
   // Auth states
   const [sessionActive, setSessionActive] = useState(false);
@@ -307,7 +310,7 @@ export default function Dashboard() {
   const [isCopied, setIsCopied] = useState(false);
 
   // New Management & Active OAuth States
-  const [activeTab, setActiveTab] = useState<"telemetry" | "management" | "security" | "ai">("telemetry");
+  const [activeTab, setActiveTab] = useState<"telemetry" | "management" | "security" | "ai" | "repos">("telemetry");
   const [lastAuditAction, setLastAuditAction] = useState<string>("System Boot Success");
 
   // Gemini State
@@ -692,7 +695,8 @@ export default function Dashboard() {
       } catch (err: any) {
         // Only log if it's not a permission error while still authenticated (likely race condition)
         if (err.code !== 'permission-denied' || isAuthenticated) {
-          console.error("Firestore health probe failed:", err);
+          const detailedError = handleFirestoreError(err, OperationType.WRITE, `logs/${tempDocId}`);
+          console.error("Firestore health probe failed:", detailedError);
         }
         setSystemHealth("Degraded");
         setHealthLatency(-1);
@@ -1571,6 +1575,13 @@ export default function Dashboard() {
                   <Sparkles className="w-4 h-4" />
                   <span>Gemini Insights</span>
                 </button>
+                <button
+                  onClick={() => setActiveTab("repos")}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "repos" ? (theme === 'dark' ? "bg-amber-600 text-white shadow-lg shadow-amber-900/20" : "bg-amber-600 text-white shadow-md shadow-amber-600/20") : (theme === 'dark' ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}`}
+                >
+                  <Terminal className="w-4 h-4" />
+                  <span>Threat Intelligence</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
@@ -2166,7 +2177,9 @@ export default function Dashboard() {
                           <div className="flex items-end justify-between h-full space-x-2">
                             {[40, 70, 45, 90, 65, 30, 50, 85, 40, 60, 35, 75].map((height, i) => (
                               <div key={i} className="flex-1 flex flex-col justify-end h-full">
-                                <Skeleton className="w-full" style={{ height: `${height}%` }} />
+                                <div className="w-full flex-1 flex flex-col justify-end" style={{ height: `${height}%` }}>
+                                  <Skeleton className="w-full h-full" />
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -2200,6 +2213,8 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
+
+                <StatusSummary logs={logs} theme={theme} isLoading={!isLogsLoaded} />
 
                 {/* SYSTEM TERMINAL LOGS (FIRESTORE SYNCED) */}
                 <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-5 shadow-md flex-1 flex flex-col relative overflow-hidden min-h-[350px]">
@@ -2671,6 +2686,11 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                )}
+                {activeTab === "repos" && (
+                  <div className="lg:col-span-12">
+                    <RepositoryIntelligence />
                   </div>
                 )}
               </div>

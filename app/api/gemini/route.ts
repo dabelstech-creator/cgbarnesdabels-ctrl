@@ -43,11 +43,8 @@ export async function POST(req: NextRequest) {
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
       contents,
-      tools,
       config: {
-        thinkingConfig: {
-          thinkingLevel: ThinkingLevel.HIGH
-        }
+        tools,
       }
     });
 

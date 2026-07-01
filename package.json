@@ -2,6 +2,7 @@
   "name": "workspace-dashboard",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -20,6 +21,7 @@
     "recharts": "^2.12.2"
   },
   "devDependencies": {
+    "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@tailwindcss/postcss": "^4.3.1",
     "@types/node": "^20.11.24",
     "@types/react": "19.0.0",

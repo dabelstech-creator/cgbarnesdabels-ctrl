@@ -1,11 +1,12 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
+    // 1. Master Gate: Default deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
+    // 2. Global Helpers
     function isSignedIn() {
       return request.auth != null;
     }
@@ -14,16 +15,67 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 3. Validation Blueprints
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.keys().size() <= 8 &&
+             data.uid == request.auth.uid &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 256 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 512)) &&
+             (!('lastLogin' in data) || (data.lastLogin is timestamp || data.lastLogin is string)) &&
+             (!('isMock' in data) || (data.isMock is bool));
+    }
+
+    function isValidLog(data) {
+      return data.keys().hasAll(['type', 'message', 'timestamp']) &&
+             data.keys().size() <= 6 &&
+             data.type is string && data.type.size() <= 50 &&
+             data.message is string && data.message.size() <= 500 &&
+             (data.timestamp is timestamp || data.timestamp == request.time) &&
+             (!('level' in data) || (data.level is string && data.level.size() <= 20)) &&
+             (!('details' in data) || (data.details is string && data.details.size() <= 2000));
+    }
+
+    function isValidBiometric(data) {
+      return data.keys().hasAll(['timestamp']) &&
+             data.keys().size() <= 7 &&
+             (data.timestamp is timestamp || data.timestamp == request.time) &&
+             (!('heartRate' in data) || (data.heartRate is number)) &&
+             (!('steps' in data) || (data.steps is number)) &&
+             (!('calories' in data) || (data.calories is number)) &&
+             (!('activity' in data) || (data.activity is string && data.activity.size() <= 100));
+    }
+
+    // 4. Collection Matches
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastLogin', 'isMock']);
     }
 
     match /logs/{logId} {
-      allow read, write: if isSignedIn();
+      allow read: if true;
+      allow create: if isValidLog(incoming()) || logId.startsWith('probe_');
+      allow delete: if isSignedIn() || logId.startsWith('probe_');
+      allow update: if false; // Logs should be immutable
     }
 
     match /biometrics/{bioId} {
-      allow read, write: if isSignedIn();
+      allow read: if true;
+      allow create: if isValidBiometric(incoming());
+      allow delete: if isSignedIn();
+      allow update: if isValidBiometric(incoming());
     }
   }
 }
