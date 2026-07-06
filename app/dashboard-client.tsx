@@ -10,6 +10,7 @@ import AuthInterface from "../components/auth-interface";
 import LogViewer from "../components/log-viewer";
 import RepositoryIntelligence from "../components/RepositoryIntelligence";
 import StatusSummary from "../components/StatusSummary";
+import AuditLog from "../components/AuditLog";
 import {
   collection,
   addDoc,
@@ -174,7 +175,7 @@ function AnimatedNumber({ value }: { value: number }) {
 // Note: Skeleton is now moved inside DashboardClient to access theme state
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, loginWithProvider } = useAuth();
   const { authStatus, isProcessing, login: mockLogin, logout: mockLogout, mockUser } = useMockAuth();
   const isAuthenticated = !!user || authStatus === 'Verified';
 
@@ -1367,7 +1368,7 @@ export default function Dashboard() {
                       </div>
 
                       <button
-                        onClick={handleGmailSSO}
+                        onClick={loginWithProvider}
                         className={`w-full font-bold rounded-xl py-3.5 transition flex items-center justify-center space-x-2 text-xs uppercase tracking-widest border ${theme === 'dark' ? 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300 hover:text-white' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900 shadow-sm'}`}
                       >
                         <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24">
@@ -1376,7 +1377,7 @@ export default function Dashboard() {
                           <path fill="#FBBC05" d="M5.27 14.28A7.2 7.2 0 0 1 5 12c0-.8.14-1.58.38-2.33V6.56H1.33A11.97 11.97 0 0 0 0 12c0 2.02.5 3.92 1.39 5.61l3.88-3.33z" />
                           <path fill="#4285F4" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.31 3.7 1.33 7.64l3.94 3.06c.95-2.85 3.6-4.95 6.73-4.95z" />
                         </svg>
-                        <span>Direct Sign In with Gmail (SSO)</span>
+                        <span>Login with Provider</span>
                       </button>
                     </div>
                   </div>
@@ -2214,7 +2215,10 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <StatusSummary logs={logs} theme={theme} isLoading={!isLogsLoaded} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <StatusSummary logs={logs} theme={theme} isLoading={!isLogsLoaded} />
+                  <AuditLog />
+                </div>
 
                 {/* SYSTEM TERMINAL LOGS (FIRESTORE SYNCED) */}
                 <div className="bg-[#090d16] border border-slate-800 rounded-2xl p-5 shadow-md flex-1 flex flex-col relative overflow-hidden min-h-[350px]">

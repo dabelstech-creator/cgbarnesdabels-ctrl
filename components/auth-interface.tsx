@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export default function AuthInterface() {
-  const { user, loading, loginWithGoogle, loginWithMock, logout } = useAuth();
+  const { user, loading, error, loginWithProvider, loginWithMock, logout } = useAuth();
   
   if (loading) {
     return (
@@ -55,16 +55,16 @@ export default function AuthInterface() {
             </div>
 
             <div className="space-y-3">
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-[10px] font-mono text-center font-bold">
+                  {error}
+                </div>
+              )}
               <button
-                onClick={loginWithGoogle}
+                onClick={loginWithProvider}
                 className="w-full flex items-center justify-center space-x-3 px-6 py-3 bg-white hover:bg-slate-50 text-slate-900 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 active:scale-[0.98] font-mono shadow-xl"
               >
-                <img 
-                  src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
-                  alt="Google" 
-                  className="w-4 h-4"
-                />
-                <span>Authorize with Google</span>
+                <span>Login with Provider</span>
               </button>
               
               <div className="relative flex items-center py-2">

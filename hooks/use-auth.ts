@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
-  GoogleAuthProvider, 
+  OAuthProvider,
   signOut,
   signInAnonymously,
   User
@@ -56,11 +56,11 @@ export function useAuth() {
     return () => unsubscribe();
   }, []);
 
-  const loginWithGoogle = async () => {
+  const loginWithProvider = async () => {
     setLoading(true);
     setError(null);
     try {
-      const provider = new GoogleAuthProvider();
+      const provider = new OAuthProvider('oidc.auth0');
       await signInWithPopup(auth, provider);
     } catch (err: any) {
       setError(err.message);
@@ -94,5 +94,5 @@ export function useAuth() {
     }
   };
 
-  return { user, loading, error, loginWithGoogle, loginWithMock, logout };
+  return { user, loading, error, loginWithProvider, loginWithMock, logout };
 }

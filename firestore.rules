@@ -65,17 +65,17 @@ service cloud.firestore {
     }
 
     match /logs/{logId} {
-      allow read: if true;
-      allow create: if isValidLog(incoming()) || logId.startsWith('probe_');
-      allow delete: if isSignedIn() || logId.startsWith('probe_');
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (isValidLog(incoming()) || logId.startsWith('probe_'));
+      allow delete: if isSignedIn();
       allow update: if false; // Logs should be immutable
     }
 
     match /biometrics/{bioId} {
-      allow read: if true;
-      allow create: if isValidBiometric(incoming());
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidBiometric(incoming());
       allow delete: if isSignedIn();
-      allow update: if isValidBiometric(incoming());
+      allow update: if isSignedIn() && isValidBiometric(incoming());
     }
   }
 }
